@@ -62,10 +62,15 @@ describe("path sandbox", () => {
     }
   }
 
-  it("rejects absolute paths outside the root", () => {
+  it.each([
+    "/etc/passwd",
+    "C:\\Windows\\System32\\drivers\\etc\\hosts",
+    "\\\\evil-share\\secret.txt",
+  ])("rejects absolute path outside the root: %s", (abs) => {
+    // Foreign-style absolutes (POSIX on Windows, Windows on POSIX) must be
+    // rejected on every platform — not just where they parse as absolute.
+    expect(() => resolveInSandbox(root, abs)).toThrowError(ToolError);
     expect(() => resolveInSandbox(root, outside)).toThrowError(ToolError);
-    const winPath = "C:\\Windows\\System32\\drivers\\etc\\hosts";
-    expect(() => resolveInSandbox(root, winPath)).toThrowError(ToolError);
   });
 
   it("rejects NUL bytes", () => {

@@ -19,6 +19,13 @@ const inside = (root: string, p: string): boolean => {
 const norm = (p: string): string =>
   process.platform === "win32" ? p.toLowerCase() : p;
 
+/**
+ * Windows-style absolute paths (drive letter or UNC share). Rejected
+ * unconditionally: on POSIX they'd slip through resolve() as inert
+ * filenames, but the same code runs on Windows where they're escapes.
+ */
+const FOREIGN_ABSOLUTE = /^(?:[a-zA-Z]:[\\/]|\\\\)/;
+
 /** Resolve `rel` against `root`, rejecting anything that escapes it. */
 export function resolveInSandbox(root: string, rel: string): string {
   if (rel.includes("\0")) {
@@ -26,7 +33,12 @@ export function resolveInSandbox(root: string, rel: string): string {
   }
   const rootResolved = path.resolve(root);
   const resolved = path.resolve(rootResolved, rel);
-  if (!inside(norm(rootResolved), norm(resolved))) {
+  // Reject foreign-style absolutes the host parser treats as relative
+  // (e.g. "C:\Windows\…" on POSIX) — inert filenames here, escapes on the
+  // OS where they're absolute. Host-native absolutes are still allowed
+  // when they resolve inside the root.
+  const foreignAbsolute = FOREIGN_ABSOLUTE.test(rel) && !path.isAbsolute(rel);
+  if (foreignAbsolute || !inside(norm(rootResolved), norm(resolved))) {
     throw new ToolError("forbidden", `Path escapes the sandbox root: ${rel}`);
   }
   return resolved;
