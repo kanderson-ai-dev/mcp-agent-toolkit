@@ -1,0 +1,28 @@
+# Dependencies & build output
+node_modules/
+dist/
+coverage/
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Runtime artifacts
+data/*.db
+data/sandbox/*
+!data/sandbox/.gitkeep
+!data/sandbox/welcome.txt
+*.log
+nul
+
+# Working/planning docs — never reach the public repo
+PLAN-1.md
+AGENTS.md
+README-agentic-*.md
+
+# OS noise
+Thumbs.db
+.DS_Store
