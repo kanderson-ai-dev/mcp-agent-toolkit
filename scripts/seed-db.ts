@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 
 /**
@@ -118,13 +119,18 @@ export function seedDemoDb(dbPath: string): void {
       for (const row of rows) insert.run(row);
     });
     insertAll(REPORTS);
+    // Fold the WAL back into the main file so the artifact stands alone
+    // (e.g. when the seeded db is copied into a Docker image).
+    db.pragma("wal_checkpoint(TRUNCATE)");
   } finally {
     db.close();
   }
 }
 
 // Run as a script: `npm run seed:db`
-if (process.argv[1] && import.meta.url === `file:///${process.argv[1].replace(/\\/g, "/")}`) {
+const isMain =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
   const dbPath = path.resolve(process.env.DB_PATH ?? "./data/demo.db");
   seedDemoDb(dbPath);
   console.log(`Seeded ${REPORTS.length} rows into ${dbPath}`);

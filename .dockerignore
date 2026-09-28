@@ -1,0 +1,16 @@
+.git
+.github
+node_modules
+dist
+coverage
+data/*.db
+data/*.db-*
+data/sandbox/reports
+tests
+docs
+*.md
+!README.md
+!LICENSE
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,22 @@
+# MCP servers speak stdio — the agent client spawns the server as a child
+# process, so "server + client together" is one container running the agent
+# CLI, which brings the MCP server up internally over stdin/stdout.
+services:
+  agent:
+    build: .
+    image: mcp-agent-toolkit
+    env_file:
+      # Optional: with no .env the agent runs on the deterministic StubLLM
+      # and keyless/offline search — the demo still exercises 3 MCP tools.
+      - path: .env
+        required: false
+    volumes:
+      # Persist only the sandbox: reports the agent writes survive the run.
+      - sandbox-data:/app/data/sandbox
+    # Usage:
+    #   docker compose up                # runs the default demo question once
+    #   docker compose run --rm agent "your question here"
+    #   docker compose run --rm agent --stub "offline run, no keys needed"
+
+volumes:
+  sandbox-data:

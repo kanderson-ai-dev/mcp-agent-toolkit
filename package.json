@@ -16,7 +16,8 @@
     "seed:db": "tsx scripts/seed-db.ts",
     "server": "tsx src/server/index.ts",
     "server:dist": "node dist/server/index.js",
-    "agent": "tsx src/client/index.ts"
+    "agent": "tsx src/client/index.ts",
+    "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
