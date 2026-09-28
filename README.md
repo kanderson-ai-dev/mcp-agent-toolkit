@@ -13,26 +13,14 @@
 [![Type checked: tsc](https://img.shields.io/badge/type%20checked-tsc--strict-blue)](https://www.typescriptlang.org/tsconfig#strict)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-```text
-$ npm run agent -- "Which security and observability reports exist in the
-  internal database? Search the web for MCP security best practices,
-  then save a cited summary to reports/demo-briefing.md"
+![Recorded demo — agent ↔ MCP server over stdio](docs/demo.gif)
 
-[iter 0] llm: connected — 4 tools discovered
-         (web_search, db_query, read_file, write_file), llm=openai
-[iter 1] → tool_call db_query  {"query":"SELECT title, author FROM reports WHERE category IN (...)"}
-[iter 1] ← ERROR db_query (9ms)  "no such column: category"     ← real error, agent recovers
-[iter 1] → tool_call web_search {"query":"MCP security best practices","max_results":5}
-[iter 1] ← ok web_search (1224ms) provider=duckduckgo
-[iter 2] → tool_call db_query  {"query":"SELECT title, author FROM reports"}
-[iter 2] ← ok db_query (1ms)
-[iter 3] → tool_call write_file {"path":"reports/demo-briefing.md", ...}
-[iter 3] ← ok write_file (4ms)
-
-=== FINAL (4 iterations, 4 tool calls, answer) ===
-```
-
-*Real run — full transcript in [`docs/demo-transcript.txt`](docs/demo-transcript.txt), the written report in `data/sandbox/reports/`.*
+*Real run, live OpenAI tool-calling loop — watch it discover the tools, hit
+a real SQL error (`no such column: category`), retry with the correct
+schema, search the live web, and write a cited report into the sandbox.
+Full transcript: [`docs/demo-transcript.txt`](docs/demo-transcript.txt) —
+recorded via `npm run demo:record` (asciinema cast in
+[`docs/demo.cast`](docs/demo.cast)).*
 
 </div>
 
@@ -188,6 +176,7 @@ npm run agent -- "question"          # live OpenAI loop (needs OPENAI_API_KEY)
 npm run agent -- "question" --stub   # deterministic, zero secrets
 npm run agent -- "question" --json   # machine-readable event stream
 npm run demo                         # seeded E2E run → docs/demo-transcript.txt
+npm run demo:record                  # record docs/demo.cast → GIF via asciinema/agg
 ```
 
 ---
@@ -295,9 +284,9 @@ src/
 │   └── llm/           #   OpenAI impl + deterministic StubLLM
 └── shared/            # config (env > .env, empty secrets = absent),
                        # ToolError + result envelopes
-scripts/               # seed-db.ts, demo.ts (records the transcript)
+scripts/               # seed-db.ts, demo.ts (transcript), record-demo.ts (cast)
 tests/                 # 110 tests — unit, security, real-stdio integration
-docs/                  # architecture.md, demo-transcript.txt (real run)
+docs/                  # architecture.md, demo.gif + demo.cast (real recording)
 data/sandbox/          # the ONLY writable surface for the fs tools
 .github/workflows/     # CI: lint → typecheck → tests+coverage → build → audit
 ```

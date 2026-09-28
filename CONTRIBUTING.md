@@ -18,6 +18,7 @@ npm run test:cov       # same + coverage (thresholds: 85% all metrics)
 npm run build          # compile to dist/
 npm run agent -- "q"   # run the agent against the real MCP server
 npm run demo           # seeded E2E demo, saves docs/demo-transcript.txt
+npm run demo:record    # record docs/demo.cast → render GIF via docker + agg
 ```
 
 ## Conventions
