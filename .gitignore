@@ -12,6 +12,7 @@ coverage/
 
 # Runtime artifacts
 data/*.db
+data/*.db-*
 data/sandbox/*
 !data/sandbox/.gitkeep
 !data/sandbox/welcome.txt
