@@ -1,0 +1,10 @@
+mcp-agent-toolkit sandbox
+=========================
+
+Everything the MCP server's `read_file` / `write_file` tools can touch
+lives under this directory. Paths outside this root — via `..`, absolute
+paths, or symlink/junction escapes — are rejected by the path sandbox.
+
+Try the agent:
+
+    npm run agent -- "Read welcome.txt and write a one-line summary to out/summary.md"
