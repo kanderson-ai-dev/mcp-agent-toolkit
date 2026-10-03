@@ -23,13 +23,17 @@
     "web:api": "tsx src/web/index.ts",
     "web:dist": "node dist/web/index.js",
     "ui:dev": "npm --prefix frontend run dev",
-    "ui:build": "npm --prefix frontend run build"
+    "ui:build": "npm --prefix frontend run build",
+    "eval": "tsx evaluation/run-eval.ts",
+    "eval:offline": "tsx evaluation/run-eval.ts --offline",
+    "ui:qa": "tsx scripts/ui-qa.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
     "@prometheus-io/client": "^0.16.1",
     "better-sqlite3": "^12.4.1",
     "express": "^5.2.1",
+    "langsmith": "^0.10.8",
     "node-html-parser": "^7.0.1",
     "openai": "^5.23.2",
     "pino": "^9.9.0",

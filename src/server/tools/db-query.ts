@@ -24,8 +24,11 @@ export function createDbQueryTool(
     name: "db_query",
     description:
       "Run a single read-only SELECT statement against the internal SQLite " +
-      "fixture database (tables such as `reports`). Returns JSON rows. " +
-      "Only SELECT/WITH statements are accepted — everything else is rejected.",
+      "fixture database. Schema: table `reports` (id, title, topic, author, " +
+      "published_at, summary); `topic` values are English keywords such as " +
+      "security, protocols, reliability, observability, retrieval. " +
+      "Returns JSON rows. Only SELECT/WITH statements are accepted — " +
+      "everything else is rejected.",
     inputSchema: {
       query: z
         .string()

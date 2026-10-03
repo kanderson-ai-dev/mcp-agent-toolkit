@@ -53,6 +53,11 @@ const envSchema = z.object({
     z.coerce.number().int().min(1).max(65535).optional(),
   ),
   OUTPUT_FORMAT: z.enum(["pretty", "json"]).default("pretty"),
+  // Evaluation / LangSmith (npm run eval) — all optional; absent → the
+  // harness runs locally only, no tracing upload.
+  LANGCHAIN_TRACING_V2: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).optional()),
+  LANGCHAIN_API_KEY: optSecret,
+  LANGCHAIN_PROJECT: z.string().min(1).default("mcp-agent-toolkit"),
   // Web console (PLAN-2.md)
   WEB_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   // Allowed origin for the Vite dev server when the frontend runs

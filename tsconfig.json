@@ -21,6 +21,7 @@
     "src/**/*.ts",
     "tests/**/*.ts",
     "scripts/**/*.ts",
+    "evaluation/**/*.ts",
     "vitest.config.ts",
     "eslint.config.js"
   ]
