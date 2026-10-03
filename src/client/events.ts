@@ -4,6 +4,15 @@
  * human-readable (`pretty`). SSE can sit on top of the same union later.
  */
 
+/**
+ * Parsed `{ status, data | code, message }` envelope produced by every
+ * tool (see `src/shared/result.ts`). Attached to `tool_result` events so
+ * richer frontends can render structured results instead of raw text.
+ */
+export type ToolResultEnvelope =
+  | { status: "ok"; data: unknown }
+  | { status: "error"; code: string; message: string };
+
 export type AgentEvent =
   | {
       type: "tool_call";
@@ -20,6 +29,8 @@ export type AgentEvent =
       ok: boolean;
       durationMs: number;
       preview: string;
+      /** Parsed tool envelope when the output was our JSON contract. */
+      result?: ToolResultEnvelope;
     }
   | { type: "llm_message"; iteration: number; content: string }
   | {

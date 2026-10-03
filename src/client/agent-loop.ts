@@ -1,4 +1,4 @@
-import type { AgentEvent } from "./events.js";
+import type { AgentEvent, ToolResultEnvelope } from "./events.js";
 import type { ToolInvoker } from "./mcp-client.js";
 import type { AgentMessage, LLMClient, OpenAIToolDef, ToolCallDef } from "./llm/types.js";
 
@@ -68,6 +68,7 @@ export async function runAgent(
         ok: outcome.ok,
         durationMs: outcome.durationMs,
         preview: outcome.text.slice(0, 500),
+        result: parseResultEnvelope(outcome.text),
       });
       messages.push({
         role: "tool",
@@ -92,6 +93,28 @@ export async function runAgent(
     toolCalls: toolCallCount,
     terminatedBy: "iteration_limit",
   };
+}
+
+/**
+ * Best-effort parse of the tool's `{ status, ... }` JSON envelope. Tool
+ * output that isn't our contract (timeouts, transport errors) yields
+ * `undefined` — the event still carries `preview` as a fallback.
+ */
+function parseResultEnvelope(text: string): ToolResultEnvelope | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "status" in parsed &&
+      (parsed.status === "ok" || parsed.status === "error")
+    ) {
+      return parsed as ToolResultEnvelope;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Malformed JSON arguments are reported back to the model, not thrown. */

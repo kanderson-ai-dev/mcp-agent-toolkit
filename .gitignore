@@ -4,6 +4,7 @@ dist/
 coverage/
 frontend/node_modules/
 frontend/dist/
+*.tsbuildinfo
 
 # E2E run artifacts (PLAN-2.md)
 playwright-report/

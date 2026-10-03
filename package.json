@@ -19,8 +19,11 @@
     "agent": "tsx src/client/index.ts",
     "demo": "tsx scripts/demo.ts",
     "demo:record": "tsx scripts/record-demo.ts",
+    "web": "tsx src/web/index.ts",
     "web:api": "tsx src/web/index.ts",
-    "web:dist": "node dist/web/index.js"
+    "web:dist": "node dist/web/index.js",
+    "ui:dev": "npm --prefix frontend run dev",
+    "ui:build": "npm --prefix frontend run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
@@ -34,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.63.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/node": "^24.5.2",
