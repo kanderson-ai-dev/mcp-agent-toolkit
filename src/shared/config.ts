@@ -53,6 +53,13 @@ const envSchema = z.object({
     z.coerce.number().int().min(1).max(65535).optional(),
   ),
   OUTPUT_FORMAT: z.enum(["pretty", "json"]).default("pretty"),
+  // Web console (PLAN-2.md)
+  WEB_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  // Allowed origin for the Vite dev server when the frontend runs
+  // unproxied against this API directly. Harmless in production — the
+  // frontend is served same-origin by this process, so no CORS header is
+  // ever needed there.
+  WEB_CORS_ORIGIN: z.string().min(1).default("http://localhost:5173"),
 });
 
 export type AppConfig = Omit<z.infer<typeof envSchema>, "SANDBOX_ROOT" | "DB_PATH"> & {

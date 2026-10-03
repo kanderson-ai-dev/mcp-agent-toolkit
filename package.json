@@ -18,12 +18,15 @@
     "server:dist": "node dist/server/index.js",
     "agent": "tsx src/client/index.ts",
     "demo": "tsx scripts/demo.ts",
-    "demo:record": "tsx scripts/record-demo.ts"
+    "demo:record": "tsx scripts/record-demo.ts",
+    "web:api": "tsx src/web/index.ts",
+    "web:dist": "node dist/web/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
     "@prometheus-io/client": "^0.16.1",
     "better-sqlite3": "^12.4.1",
+    "express": "^5.2.1",
     "node-html-parser": "^7.0.1",
     "openai": "^5.23.2",
     "pino": "^9.9.0",
@@ -32,9 +35,12 @@
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.5.2",
+    "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.0.2",
     "eslint": "^10.0.0",
+    "supertest": "^7.3.1",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.43.0",

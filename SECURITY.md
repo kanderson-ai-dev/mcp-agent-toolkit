@@ -29,6 +29,26 @@ being true: `../` traversal rejected, absolute paths rejected, non-SELECT
 statements rejected, rate limiter rejects over-quota calls on the real MCP
 wire, injected tool output reaches the model sanitized.
 
+## Web console (`src/web/`)
+
+The Express adapter (`npm run web:api`) is a **local, single-user
+console**, not a multi-tenant backend meant for direct Internet exposure:
+
+- No authentication/authorization — anyone who can reach the port can ask
+  questions and trigger tool calls. Run it on `localhost` or behind your
+  own auth layer/reverse proxy if exposing it beyond your machine.
+- One MCP server child process is shared across the whole web server
+  lifetime (not per request); the rate limiter and sandbox guarantees
+  from the MCP server above apply identically regardless of how many
+  browser tabs connect.
+- CORS is restricted to a single configurable dev origin
+  (`WEB_CORS_ORIGIN`, default the Vite dev server) — the production build
+  is served same-origin by the same Express process, so no CORS header is
+  needed there at all.
+- `POST /api/chat` validates the question with Zod (length-bounded) before
+  it ever reaches the agent loop; `GET /api/chat/stream` run ids are
+  single-use and TTL-expired to bound memory use.
+
 ## Scope notes (honest)
 
 - The stdio transport trusts the spawning client — this is the MCP trust
@@ -38,6 +58,8 @@ wire, injected tool output reaches the model sanitized.
   shared store.
 - `db_query` read-only enforcement assumes a SQLite engine; porting to
   Postgres would add role-level `GRANT SELECT` as a third layer.
+- The web console inherits the "no auth" scope note above — treat it as a
+  local demo surface, not a hosted product, until an auth layer is added.
 
 ## Reporting
 

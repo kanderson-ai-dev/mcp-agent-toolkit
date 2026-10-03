@@ -13,7 +13,7 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       // Process entrypoints are exercised by the spawned integration tests,
       // which run the compiled artifact — not instrumentable in-process.
-      exclude: ["src/server/index.ts", "src/client/index.ts"],
+      exclude: ["src/server/index.ts", "src/client/index.ts", "src/web/index.ts"],
       thresholds: {
         lines: 85,
         functions: 85,
