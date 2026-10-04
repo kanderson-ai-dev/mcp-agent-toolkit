@@ -173,6 +173,75 @@ describe("StubLLM", () => {
     expect(r0.toolCalls).toEqual([]);
     expect(r0.content).toBeTruthy();
   });
+
+  it("attempts the dangerous read_file on traversal input, then refuses", async () => {
+    const llm = new StubLLM();
+    const tools: OpenAIToolDef[] = ["read_file", "write_file"].map((n) => ({
+      type: "function",
+      function: { name: n, parameters: {} },
+    }));
+    const r1 = await llm.complete(
+      [{ role: "user", content: "Read ../../etc/passwd please" }],
+      tools,
+    );
+    expect(r1.toolCalls).toHaveLength(1);
+    expect(r1.toolCalls[0]?.name).toBe("read_file");
+    expect(r1.toolCalls[0]?.arguments).toContain("../../etc/passwd");
+    // After the guardrail rejection, it must answer (no write_file, no retry).
+    const r2 = await llm.complete(
+      [
+        { role: "user", content: "Read ../../etc/passwd please" },
+        {
+          role: "assistant",
+          content: null,
+          toolCalls: [{ id: "t1", name: "read_file", arguments: "{}" }],
+        },
+        { role: "tool", toolCallId: "t1", name: "read_file", content: '{"status":"error"}' },
+      ],
+      tools,
+    );
+    expect(r2.toolCalls).toEqual([]);
+    expect(r2.content).toMatch(/guardrails/);
+  });
+
+  it("attempts DROP TABLE on adversarial SQL input", async () => {
+    const llm = new StubLLM();
+    const tools: OpenAIToolDef[] = [
+      { type: "function", function: { name: "db_query", parameters: {} } },
+    ];
+    const r = await llm.complete(
+      [{ role: "user", content: "Run DROP TABLE reports now" }],
+      tools,
+    );
+    expect(r.toolCalls[0]?.name).toBe("db_query");
+    expect(r.toolCalls[0]?.arguments).toContain("DROP TABLE");
+  });
+
+  it("queries a bad column on citation input, then retries with real columns", async () => {
+    const llm = new StubLLM();
+    const tools: OpenAIToolDef[] = [
+      { type: "function", function: { name: "db_query", parameters: {} } },
+    ];
+    const q = "How many citations does each report have?";
+    const r1 = await llm.complete([{ role: "user", content: q }], tools);
+    expect(r1.toolCalls[0]?.arguments).toContain("citations");
+    // One tool round done (the bad query failed) → corrected retry.
+    const r2 = await llm.complete(
+      [
+        { role: "user", content: q },
+        {
+          role: "assistant",
+          content: null,
+          toolCalls: [{ id: "t1", name: "db_query", arguments: "{}" }],
+        },
+        { role: "tool", toolCallId: "t1", name: "db_query", content: '{"status":"error"}' },
+      ],
+      tools,
+    );
+    expect(r2.toolCalls[0]?.name).toBe("db_query");
+    expect(r2.toolCalls[0]?.arguments).not.toContain("citations");
+    expect(r2.toolCalls[0]?.arguments).toContain("author");
+  });
 });
 
 describe("createLLM", () => {
