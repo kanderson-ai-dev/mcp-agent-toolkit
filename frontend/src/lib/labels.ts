@@ -26,22 +26,22 @@ export interface ToolMeta {
 
 const TOOL_META: Record<string, ToolMeta> = {
   web_search: {
-    label: "Búsqueda web",
+    label: "Web search",
     Icon: Globe,
     tileClass: "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30",
   },
   db_query: {
-    label: "Consulta a base de datos",
+    label: "Database query",
     Icon: Database,
     tileClass: "bg-violet-500/15 text-violet-300 ring-violet-500/30",
   },
   read_file: {
-    label: "Lectura de archivo",
+    label: "File read",
     Icon: FileText,
     tileClass: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
   },
   write_file: {
-    label: "Escritura de archivo",
+    label: "File write",
     Icon: FilePenLine,
     tileClass: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
   },
@@ -53,13 +53,13 @@ const FALLBACK_META: ToolMeta = {
   tileClass: "bg-slate-500/15 text-slate-300 ring-slate-500/30",
 };
 
-/** `snake_case`/`camelCase` → "Palabras legibles" (fallback only). */
+/** `snake_case`/`camelCase` → "Readable words" (fallback only). */
 function humanizeName(name: string): string {
   const words = name
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .trim();
-  return words.length === 0 ? "Herramienta" : words[0]!.toUpperCase() + words.slice(1);
+  return words.length === 0 ? "Tool" : words[0]!.toUpperCase() + words.slice(1);
 }
 
 /** Friendly tool name — never the raw identifier. */
@@ -71,12 +71,12 @@ export function toolMeta(toolName: string): ToolMeta {
 
 /** Status badges — `ok`, `isError`, `running` never reach the UI. */
 export const STATUS_LABEL = {
-  running: "En curso",
-  ok: "Éxito",
+  running: "Running",
+  ok: "Success",
   error: "Error",
 } as const;
 
-/** Search provider ids → "Fuente: …" label. */
+/** Search provider ids → "Source: …" label. */
 export function providerLabel(provider: unknown): string {
   switch (provider) {
     case "tavily":
@@ -84,9 +84,9 @@ export function providerLabel(provider: unknown): string {
     case "duckduckgo":
       return "DuckDuckGo";
     case "none":
-      return "modo sin conexión";
+      return "offline mode";
     default:
-      return "desconocida";
+      return "unknown";
   }
 }
 
@@ -94,23 +94,23 @@ export function providerLabel(provider: unknown): string {
 export function errorCodeLabel(code: string): string {
   switch (code) {
     case "invalid_input":
-      return "Entrada no válida";
+      return "Invalid input";
     case "forbidden":
-      return "Acción bloqueada por seguridad";
+      return "Blocked by security policy";
     case "not_found":
-      return "No encontrado";
+      return "Not found";
     case "rate_limited":
-      return "Límite de uso alcanzado";
+      return "Rate limit reached";
     case "upstream":
-      return "Servicio externo no disponible";
+      return "External service unavailable";
     default:
-      return "Error inesperado";
+      return "Unexpected error";
   }
 }
 
-/** `iteration` → "Paso N" inside the timeline. */
+/** `iteration` → "Step N" inside the timeline. */
 export function stepLabel(iteration: number): string {
-  return `Paso ${iteration}`;
+  return `Step ${iteration}`;
 }
 
 /** `requestId` → abbreviated trace label (copy button shows the full id). */
@@ -120,7 +120,7 @@ export function traceLabel(requestId: string): string {
 
 /**
  * One-line prose summary of a call's arguments — a short sentence, not a
- * JSON dump. Raw argument payloads live behind "Ver JSON técnico".
+ * JSON dump. Raw argument payloads live behind "View raw JSON".
  */
 export function argsSummary(toolName: string, args: Record<string, unknown>): string {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -131,7 +131,7 @@ export function argsSummary(toolName: string, args: Record<string, unknown>): st
     case "web_search": {
       const q = str(args.query);
       const max = num(args.max_results);
-      return max !== undefined ? `«${q}» · hasta ${max} resultados` : `«${q}»`;
+      return max !== undefined ? `"${q}" · up to ${max} results` : `"${q}"`;
     }
     case "db_query":
       return str(args.query);
@@ -141,7 +141,7 @@ export function argsSummary(toolName: string, args: Record<string, unknown>): st
       const p = str(args.path);
       const content = str(args.content);
       return content
-        ? `${p} · ${(new TextEncoder().encode(content).length / 1024).toFixed(1)} KB de contenido`
+        ? `${p} · ${(new TextEncoder().encode(content).length / 1024).toFixed(1)} KB of content`
         : p;
     }
     default:
@@ -166,31 +166,31 @@ function rec(v: unknown): Record<string, unknown> {
 }
 
 /**
- * One-line human summary of a finished tool result — "5 resultados",
- * "3 filas devueltas", "1.9 KB escritos" — shown next to the collapsed
- * "Resultado" disclosure. Raw keys (`row_count`, `bytes_written`) never
+ * One-line human summary of a finished tool result — "5 results",
+ * "3 rows returned", "1.9 KB written" — shown next to the collapsed
+ * "Result" disclosure. Raw keys (`row_count`, `bytes_written`) never
  * reach the string.
  */
 export function resultSummary(step: ResultLikeStep): string {
   const result = step.result;
-  if (!result) return step.status === "error" ? "Falló" : "";
+  if (!result) return step.status === "error" ? "Failed" : "";
   if (result.status === "error") return errorCodeLabel(result.code);
   const data = rec(result.data);
   switch (step.tool) {
     case "web_search": {
       const hits = Array.isArray(data.results) ? data.results.length : 0;
-      return `${hits} ${hits === 1 ? "resultado" : "resultados"}`;
+      return `${hits} ${hits === 1 ? "result" : "results"}`;
     }
     case "db_query": {
       const n = typeof data.row_count === "number" ? data.row_count : 0;
-      return `${n} ${n === 1 ? "fila devuelta" : "filas devueltas"}`;
+      return `${n} ${n === 1 ? "row returned" : "rows returned"}`;
     }
     case "read_file":
-      return typeof data.bytes === "number" ? humanizeBytes(data.bytes) : "Contenido leído";
+      return typeof data.bytes === "number" ? humanizeBytes(data.bytes) : "Content read";
     case "write_file":
       return typeof data.bytes_written === "number"
-        ? `${humanizeBytes(data.bytes_written)} escritos`
-        : "Archivo guardado";
+        ? `${humanizeBytes(data.bytes_written)} written`
+        : "File saved";
     default:
       return "";
   }

@@ -24,14 +24,17 @@ import { judgeRun, type JudgeScores } from "./judge.js";
  * (OpenAI + real MCP server over stdio), applies deterministic checks
  * and an independent LLM-as-judge, and — when LangSmith credentials are
  * configured — uploads the dataset and publishes a versioned experiment
- * via `evaluate()`. Always writes `evaluation/scorecard.json`.
+ * via `evaluate()`. Live runs write `evaluation/scorecard.json` (the
+ * committed artifact); offline smoke runs write `scorecard.offline.json`
+ * so the real scorecard is never clobbered by a credential-free check.
  *
  * Offline mode: same harness over StubLLM on a small subset — a smoke
  * test that the runner works with zero credentials (CI-friendly). It
  * does NOT measure answer quality.
  */
 
-const SCORECARD_PATH = path.resolve(import.meta.dirname, "scorecard.json");
+const SCORECARD_LIVE = path.resolve(import.meta.dirname, "scorecard.json");
+const SCORECARD_OFFLINE = path.resolve(import.meta.dirname, "scorecard.offline.json");
 const OFFLINE_SUBSET = 3;
 
 export interface QuestionOutput {
@@ -46,10 +49,18 @@ export interface ScorecardEntry {
   id: string;
   category: string;
   prompt: string;
-  toolCalls: { tool: string; ok: boolean; durationMs: number; args: Record<string, unknown> }[];
+  toolCalls: {
+    tool: string;
+    ok: boolean;
+    durationMs: number;
+    args: Record<string, unknown>;
+    outputPreview?: string;
+  }[];
   iterations: number;
   terminatedBy: string;
   durationMs: number;
+  /** First 800 chars of the agent's final answer — what the judge saw. */
+  answerPreview: string;
   checks: DeterministicChecks;
   judge?: JudgeScores;
   error?: string;
@@ -88,6 +99,7 @@ async function runQuestion(deps: AgentDeps, prompt: string): Promise<QuestionOut
       if (call) {
         call.ok = event.ok;
         call.durationMs = event.durationMs;
+        call.outputPreview = event.preview;
       }
     }
   };
@@ -190,10 +202,12 @@ function buildEntry(
       ok: c.ok,
       durationMs: c.durationMs,
       args: c.args,
+      outputPreview: c.outputPreview,
     })),
     iterations: output.iterations,
     terminatedBy: output.terminatedBy,
     durationMs,
+    answerPreview: output.finalContent.slice(0, 800),
     checks: checkRun(q, output.toolCalls),
     judge,
     error: output.error,
@@ -421,7 +435,8 @@ async function main(): Promise<void> {
     aggregate: summary,
     results: entries,
   };
-  fs.writeFileSync(SCORECARD_PATH, JSON.stringify(scorecard, null, 2));
+  const scorecardPath = offline ? SCORECARD_OFFLINE : SCORECARD_LIVE;
+  fs.writeFileSync(scorecardPath, JSON.stringify(scorecard, null, 2));
 
   // Console report
   console.log("\n── results ──────────────────────────────────────────");
@@ -441,7 +456,7 @@ async function main(): Promise<void> {
   console.log(`tool_usage judge avg:    ${summary.toolUsageAvg?.toFixed(2) ?? "n/a"}`);
   console.log(`tool usage appropriate:  ${(summary.toolUsageAppropriatePct * 100).toFixed(0)}%  (≥${THRESHOLDS.toolUsageAppropriate * 100}%)`);
   console.log(`adversarial resisted:    ${summary.adversarialResisted}  (must be all)`);
-  console.log(`scorecard → ${SCORECARD_PATH}`);
+  console.log(`scorecard → ${scorecardPath}`);
 
   if (!judged) {
     console.log("\nOFFLINE harness smoke test passed — runner, MCP transport and scorecard write all work.");

@@ -48,22 +48,22 @@ export function PromptComposer({ disabled, onSubmit }: PromptComposerProps) {
             rows={2}
             maxLength={MAX_CHARS}
             disabled={disabled}
-            placeholder="Haz una pregunta al agente…"
-            aria-label="Pregunta para el agente"
+            placeholder="Ask the agent a question…"
+            aria-label="Question for the agent"
             className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm leading-relaxed text-slate-100 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
           />
           <button
             type="button"
             onClick={send}
             disabled={!canSend}
-            aria-label="Enviar pregunta"
+            aria-label="Send question"
             className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:shadow-none"
           >
             <SendHorizonal className="size-4.5" />
           </button>
         </div>
         <div className="mt-1.5 flex items-center justify-between px-1 text-xs text-slate-400">
-          <span>Enter para enviar · Shift+Enter para nueva línea</span>
+          <span>Enter to send · Shift+Enter for a new line</span>
           <span className={remaining < 200 ? "text-amber-300" : ""}>
             {value.length}/{MAX_CHARS}
           </span>

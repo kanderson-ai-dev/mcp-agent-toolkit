@@ -12,6 +12,9 @@ export interface RecordedToolCall {
   ok: boolean;
   args: Record<string, unknown>;
   durationMs: number;
+  /** Truncated text of what the tool returned — the evidence the judge
+   * verifies grounding against. Captured from the `tool_result` preview. */
+  outputPreview?: string;
 }
 
 export interface DeterministicChecks {

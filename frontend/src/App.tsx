@@ -97,7 +97,7 @@ export default function App() {
           const message =
             err instanceof ApiError
               ? err.message
-              : "No se pudo contactar con el servidor. ¿Está arrancado?";
+              : "Could not reach the server. Is it running?";
           patchLiveRun((run) => ({ ...run, errorMessage: message }));
           setPhase("error");
           return;
@@ -131,7 +131,7 @@ export default function App() {
                   : {
                       ...run,
                       errorMessage:
-                        "Se perdió la conexión con el servidor antes de terminar.",
+                        "Connection to the server was lost before the run finished.",
                     },
               );
             }
@@ -153,11 +153,11 @@ export default function App() {
         {apiDown && runs.length === 0 ? (
           <div className="mt-10 rounded-xl bg-rose-500/10 p-5 text-center ring-1 ring-rose-500/30">
             <p className="text-sm font-semibold text-rose-200">
-              El servidor del agente no responde
+              The agent server is not responding
             </p>
             <p className="mt-1 text-xs text-rose-200/70">
-              Arranca el backend con <code className="font-mono">npm run web</code> y
-              recarga esta página.
+              Start the backend with <code className="font-mono">npm run web</code> and
+              reload this page.
             </p>
           </div>
         ) : runs.length === 0 ? (

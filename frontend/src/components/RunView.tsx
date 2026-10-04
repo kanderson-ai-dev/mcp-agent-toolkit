@@ -40,7 +40,7 @@ export function RunView({ run, live }: { run: RunRecord; live: boolean }) {
               <span className="relative inline-flex size-2.5 rounded-full bg-indigo-400" />
             </span>
             <p className="text-xs font-medium text-slate-300">
-              El agente está trabajando…
+              The agent is working…
             </p>
           </div>
         )}
@@ -50,7 +50,7 @@ export function RunView({ run, live }: { run: RunRecord; live: boolean }) {
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-300" />
             <div>
               <p className="text-sm font-semibold text-rose-200">
-                No se pudo completar la consulta
+                The request could not be completed
               </p>
               <p className="mt-1 text-xs leading-relaxed text-rose-200/80">
                 {run.errorMessage}

@@ -9,7 +9,7 @@ const STYLES: Record<ToolStepStatus, string> = {
   error: "bg-rose-500/15 text-rose-300 ring-rose-500/30",
 };
 
-/** Human status badge — "En curso" / "Éxito" / "Error", never raw flags. */
+/** Human status badge — "Running" / "Success" / "Error", never raw flags. */
 export function StatusBadge({ status }: { status: ToolStepStatus }) {
   const Icon =
     status === "running" ? Loader2 : status === "ok" ? CheckCircle2 : XCircle;

@@ -54,7 +54,8 @@ function summarizeCalls(calls: RecordedToolCall[]): string {
   return calls
     .map((c, i) => {
       const argPreview = JSON.stringify(c.args).slice(0, 160);
-      return `${i + 1}. ${c.tool} ${c.ok ? "succeeded" : "FAILED"} (${c.durationMs}ms) args=${argPreview}`;
+      const output = (c.outputPreview ?? "(no output captured)").slice(0, 400);
+      return `${i + 1}. ${c.tool} ${c.ok ? "succeeded" : "FAILED"} (${c.durationMs}ms)\n   args=${argPreview}\n   output=${output}`;
     })
     .join("\n");
 }
@@ -68,6 +69,7 @@ export async function judgeRun(
     `Question category: ${input.question.category}`,
     `User question: ${input.question.prompt}`,
     `Expected behavior notes: ${input.question.expect.notes || "(none)"}`,
+    `Reference answer (authoritative ground truth, when provided): ${input.question.referenceAnswer ?? "(none)"}`,
     `Tools the run was expected to use: ${input.question.expect.tools.join(", ") || "(none required)"}`,
     `Run terminated by: ${input.terminatedBy}`,
     "",

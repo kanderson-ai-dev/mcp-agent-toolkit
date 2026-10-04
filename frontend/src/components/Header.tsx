@@ -22,14 +22,14 @@ export function Header({ toolsInfo, connected }: HeaderProps) {
               MCP Agent Console
             </h1>
             <p className="text-xs text-slate-400">
-              Herramientas reales, por protocolo estándar
+              Real tools, over a standard protocol
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {toolsInfo && (
             <span className="hidden rounded-full bg-slate-800/80 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-slate-700 sm:inline">
-              {toolsInfo.tools.length} herramientas
+              {toolsInfo.tools.length} tools
             </span>
           )}
           {provider && (
@@ -41,7 +41,7 @@ export function Header({ toolsInfo, connected }: HeaderProps) {
               }
             >
               <Sparkles className="size-3.5" />
-              {isStub ? "Modo demo" : "OpenAI"}
+              {isStub ? "Demo mode" : "OpenAI"}
             </span>
           )}
           <span className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -52,7 +52,7 @@ export function Header({ toolsInfo, connected }: HeaderProps) {
                   : "size-2 rounded-full bg-rose-400"
               }
             />
-            {connected ? "En línea" : "Sin conexión"}
+            {connected ? "Online" : "Offline"}
           </span>
         </div>
       </div>

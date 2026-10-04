@@ -81,7 +81,7 @@ export function ToolStepCard({ step }: { step: ToolStep }) {
                 aria-expanded={resultOpen}
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
               >
-                Resultado{!resultOpen && resultSummary(step) && `: ${resultSummary(step)}`}
+                Result{!resultOpen && resultSummary(step) && `: ${resultSummary(step)}`}
                 <ChevronDown
                   className={clsx(
                     "size-3.5 transition-transform",
@@ -95,13 +95,13 @@ export function ToolStepCard({ step }: { step: ToolStep }) {
 
           <div className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-400">
             <span>
-              ID de traza: <span className="font-mono text-slate-300">{traceLabel(step.requestId)}</span>
+              Trace ID: <span className="font-mono text-slate-300">{traceLabel(step.requestId)}</span>
             </span>
             <button
               type="button"
               onClick={() => void copyTrace()}
-              title="Copiar ID de traza completo"
-              aria-label="Copiar ID de traza completo"
+              title="Copy full trace ID"
+              aria-label="Copy full trace ID"
               className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
             >
               {copied ? <Check className="size-3.5 text-emerald-300" /> : <Copy className="size-3.5" />}

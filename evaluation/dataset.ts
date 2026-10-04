@@ -20,6 +20,9 @@ const QuestionSchema = z.object({
   ]),
   uiExample: z.boolean().default(false),
   prompt: z.string().min(1),
+  /** Optional gold answer — ground truth the judge can verify claims
+   * against when the correct output is deterministic (e.g. seeded rows). */
+  referenceAnswer: z.string().optional(),
   expect: z.object({
     tools: z.array(z.string()).default([]),
     forbiddenSuccessfulTools: z.array(z.string()).default([]),

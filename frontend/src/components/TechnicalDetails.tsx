@@ -3,7 +3,7 @@ import { Braces, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 
 /**
- * "Ver JSON técnico" — the opt-in escape hatch for raw payloads. Hidden
+ * "View raw JSON" — the opt-in escape hatch for raw payloads. Hidden
  * by default; the primary experience never shows raw JSON or raw field
  * names. Expanding is a deliberate user action.
  */
@@ -18,7 +18,7 @@ export function TechnicalDetails({ payload }: { payload: unknown }) {
         className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
       >
         <Braces className="size-3.5" />
-        Ver JSON técnico
+        View raw JSON
         <ChevronDown
           className={clsx("size-3.5 transition-transform", open && "rotate-180")}
         />

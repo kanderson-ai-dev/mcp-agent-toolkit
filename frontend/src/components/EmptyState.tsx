@@ -6,9 +6,9 @@ interface EmptyStateProps {
 }
 
 const HIGHLIGHTS = [
-  { Icon: Workflow, text: "Descubre herramientas en vivo vía MCP" },
-  { Icon: ShieldCheck, text: "Guardrails activos en cada llamada" },
-  { Icon: Zap, text: "Eventos transmitidos en tiempo real" },
+  { Icon: Workflow, text: "Discovers tools live over MCP" },
+  { Icon: ShieldCheck, text: "Guardrails active on every call" },
+  { Icon: Zap, text: "Events streamed in real time" },
 ];
 
 /**
@@ -21,14 +21,14 @@ export function EmptyState({ examples, onPick }: EmptyStateProps) {
       <div className="rounded-2xl bg-gradient-to-b from-indigo-500/20 to-transparent p-[1px]">
         <div className="rounded-2xl bg-slate-950 px-6 py-5">
           <h2 className="bg-gradient-to-r from-indigo-200 via-slate-100 to-cyan-200 bg-clip-text text-2xl font-bold tracking-tight text-transparent sm:text-3xl">
-            Pregunta. Observa cómo trabaja el agente.
+            Ask. Watch the agent work.
           </h2>
         </div>
       </div>
       <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-400">
-        El agente decide qué herramientas necesita — búsqueda web, base de datos
-        interna o archivos del workspace — las invoca por el protocolo MCP y te
-        muestra cada paso en vivo, con las fuentes que usó.
+        The agent decides which tools it needs — web search, the internal
+        database, or workspace files — invokes them over the MCP protocol, and
+        shows you every step live, with the sources it used.
       </p>
 
       <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
@@ -43,7 +43,7 @@ export function EmptyState({ examples, onPick }: EmptyStateProps) {
       {examples.length > 0 && (
         <div className="mt-8 w-full max-w-2xl">
           <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            Prueba con una de estas preguntas
+            Try one of these questions
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {examples.map((q) => (

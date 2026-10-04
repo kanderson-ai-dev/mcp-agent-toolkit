@@ -27,7 +27,7 @@ function text(v: unknown): string {
  * Structured, per-tool result rendering. The `tool_result` event carries
  * the parsed `{ status, data | code, message }` envelope; each tool's
  * `data` shape is rendered in human terms (result lists, tables, file
- * notes) — raw JSON stays behind "Ver JSON técnico" on the card itself.
+ * notes) — raw JSON stays behind "View raw JSON" on the card itself.
  */
 export function ResultPanel({ step }: ResultPanelProps) {
   const result = step.result;
@@ -78,9 +78,9 @@ function WebSearchResult({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="mt-3">
       <p className="text-xs text-slate-400">
-        Fuente: <span className="font-medium text-slate-300">{providerLabel(data.provider)}</span>
+        Source: <span className="font-medium text-slate-300">{providerLabel(data.provider)}</span>
         {" · "}
-        {hits.length} {hits.length === 1 ? "resultado" : "resultados"}
+        {hits.length} {hits.length === 1 ? "result" : "results"}
       </p>
       <ul className="mt-2 space-y-2">
         {hits.map((hit, i) => {
@@ -125,11 +125,11 @@ function DbQueryResult({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="mt-3">
       <p className="text-xs text-slate-400">
-        {rowCount} {rowCount === 1 ? "fila devuelta" : "filas devueltas"}
+        {rowCount} {rowCount === 1 ? "row returned" : "rows returned"}
         {truncated && (
           <span className="ml-2 inline-flex items-center gap-1 text-amber-300">
             <AlertTriangle className="size-3" />
-            resultados recortados
+            results truncated
           </span>
         )}
       </p>
@@ -172,7 +172,7 @@ function DbQueryResult({ data }: { data: Record<string, unknown> }) {
           onClick={() => setExpanded((v) => !v)}
           className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
         >
-          {expanded ? "Mostrar menos" : `Ver las ${rows.length} filas`}
+          {expanded ? "Show less" : `Show all ${rows.length} rows`}
           <ChevronDown className={clsx("size-3.5 transition-transform", expanded && "rotate-180")} />
         </button>
       )}
@@ -203,7 +203,7 @@ function ReadFileResult({ data }: { data: Record<string, unknown> }) {
         {clipped ? `${content.slice(0, CONTENT_PREVIEW_CHARS)}…` : content}
       </pre>
       {clipped && (
-        <p className="mt-1 text-xs text-slate-400">Vista previa del contenido</p>
+        <p className="mt-1 text-xs text-slate-400">Content preview</p>
       )}
     </div>
   );
@@ -213,11 +213,11 @@ function WriteFileResult({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="mt-3 flex items-center gap-2.5 rounded-lg bg-emerald-500/10 p-3 ring-1 ring-emerald-500/25">
       <p className="text-xs text-emerald-200">
-        Archivo guardado: <span className="font-medium">{text(data.path)}</span>
+        File saved: <span className="font-medium">{text(data.path)}</span>
         {typeof data.bytes_written === "number" && (
           <span className="text-emerald-200/70">
             {" · "}
-            {humanizeBytes(data.bytes_written)} escritos
+            {humanizeBytes(data.bytes_written)} written
           </span>
         )}
       </p>

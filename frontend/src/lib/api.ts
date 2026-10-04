@@ -20,7 +20,7 @@ async function readErrorMessage(res: Response): Promise<string> {
   } catch {
     // fall through to the generic status line
   }
-  return `El servidor respondió con un error (${res.status}).`;
+  return `The server returned an error (${res.status}).`;
 }
 
 export async function fetchTools(): Promise<ToolsInfo> {
@@ -39,7 +39,7 @@ export async function submitQuestion(question: string): Promise<string> {
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   const body = (await res.json()) as { runId?: unknown };
   if (typeof body.runId !== "string" || !body.runId) {
-    throw new ApiError("Respuesta inesperada del servidor.", res.status);
+    throw new ApiError("Unexpected server response.", res.status);
   }
   return body.runId;
 }

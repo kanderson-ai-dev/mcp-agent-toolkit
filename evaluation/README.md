@@ -14,13 +14,15 @@ npm run eval:offline   # harness smoke test — no LLM calls, always passes
 
 Offline mode swaps the real model for `StubLLM`: it exercises the dataset
 loader, deterministic checks, scorecard writer and thresholds without calling
-any external API. Use it to validate harness changes in CI.
+any external API. Use it to validate harness changes in CI. It writes
+`scorecard.offline.json` (gitignored) — the committed `scorecard.json` always
+reflects a real live run.
 
 ## Dataset
 
 `dataset.json` is the versioned evaluation set (v1.0.0). Each entry carries:
 
-- `id`, `category`, `prompt` — the user question, in Spanish (the product's
+- `id`, `category`, `prompt` — the user question, in English (the product's
   user-facing language).
 - `referenceAnswer` — optional gold answer for the judge.
 - `expectedTools` / `forbiddenTools` — deterministic tool-selection contract.

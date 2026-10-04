@@ -20,13 +20,13 @@ export function FinalAnswerCard({
     <div className="animate-fade-up rounded-xl bg-indigo-500/[0.07] p-4 ring-1 ring-indigo-500/25 sm:p-5">
       <div className="flex items-center gap-2">
         <MessageSquareText className="size-4 text-indigo-300" />
-        <h3 className="text-sm font-semibold text-indigo-200">Respuesta final</h3>
+        <h3 className="text-sm font-semibold text-indigo-200">Final answer</h3>
       </div>
 
       {final.terminatedBy === "iteration_limit" && (
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200 ring-1 ring-amber-500/25">
           <AlertTriangle className="size-3.5 shrink-0" />
-          Se alcanzó el límite de pasos — la respuesta puede estar incompleta.
+          Step limit reached — the answer may be incomplete.
         </div>
       )}
 
@@ -46,12 +46,12 @@ export function FinalAnswerCard({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-indigo-500/15 pt-3 text-xs text-indigo-200/60">
-        <span>{final.iterations} {final.iterations === 1 ? "paso" : "pasos"}</span>
+        <span>{final.iterations} {final.iterations === 1 ? "step" : "steps"}</span>
         <span aria-hidden="true">·</span>
         <span>
           {final.toolCalls === 0
-            ? "sin llamadas a herramientas"
-            : `${final.toolCalls} ${final.toolCalls === 1 ? "llamada a herramienta" : "llamadas a herramientas"}`}
+            ? "no tool calls"
+            : `${final.toolCalls} ${final.toolCalls === 1 ? "tool call" : "tool calls"}`}
         </span>
         {elapsedMs !== undefined && (
           <>

@@ -68,7 +68,7 @@ async function scanForbidden(page: Page, context: string): Promise<string[]> {
  * for success, error and connection-loss alike).
  */
 async function waitForRunEnd(page: Page): Promise<void> {
-  const composer = page.getByLabel("Pregunta para el agente");
+  const composer = page.getByLabel("Question for the agent");
   // The click returns before React flips `disabled` — wait for the
   // disable first (instant API errors skip it) then for re-enable.
   await composer
@@ -81,8 +81,8 @@ async function waitForRunEnd(page: Page): Promise<void> {
 }
 
 async function submitQuestion(page: Page, question: string): Promise<void> {
-  await page.getByLabel("Pregunta para el agente").fill(question);
-  await page.getByLabel("Enviar pregunta").click();
+  await page.getByLabel("Question for the agent").fill(question);
+  await page.getByLabel("Send question").click();
 }
 
 async function main(): Promise<void> {
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
     if (!first) throw new Error("unreachable — checked above");
     await submitQuestion(page, first.prompt);
     await page
-      .locator("text=En curso")
+      .locator("text=Running")
       .first()
       .waitFor({ state: "visible", timeout: 30_000 });
     await page.screenshot({ path: path.join(OUT_DIR, "02-streaming.png"), fullPage: true });
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
     }
 
     // ── Expanded result panel (a database card, if present) ────────
-    const resultado = page.locator("text=Resultado").last();
+    const resultado = page.getByRole("button", { name: /^Result/ }).last();
     if (await resultado.isVisible().catch(() => false)) {
       await resultado.click();
       await page.waitForTimeout(400);
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
     }
 
     // ── Technical JSON toggle (deliberately shows raw payload) ─────
-    const toggle = page.locator("text=Ver JSON técnico").first();
+    const toggle = page.locator("text=View raw JSON").first();
     if (await toggle.isVisible().catch(() => false)) {
       await toggle.click();
       await page.waitForTimeout(300);
