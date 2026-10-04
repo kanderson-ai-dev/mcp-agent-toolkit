@@ -8,6 +8,13 @@ const nextId = (): string => `stubcall_${++seq}`;
  * web_search + db_query in parallel, then write_file, then a final
  * answer — so the whole agent loop is exercisable offline, in tests, and
  * in CI with zero secrets.
+ *
+ * Input-aware branches keep determinism while exercising the guardrail
+ * and error-recovery paths end-to-end: questions containing a path
+ * traversal or `DROP TABLE` deliberately attempt the dangerous call so
+ * the server's typed `forbidden` error renders in the UI; questions
+ * asking for a "citation" count trigger a nonexistent-column error and
+ * then a corrected retry.
  */
 export class StubLLM implements LLMClient {
   readonly name = "stub";
@@ -18,14 +25,61 @@ export class StubLLM implements LLMClient {
     const userQuestion =
       [...messages].reverse().find((m) => m.role === "user" && "content" in m)?.content ??
       "the user's question";
+    const question = String(userQuestion);
+    const adversarial =
+      /\.\.[\\/]|etc\/passwd/i.test(question) || /\bDROP\s+TABLE\b/i.test(question);
+    const toolCallsBy = (name: string): number =>
+      messages.filter((m) => m.role === "tool" && m.name === name).length;
 
     if (toolRounds === 0) {
+      // Adversarial inputs: attempt the dangerous call — the guardrail
+      // must reject it (asserted in e2e + security suites).
+      if (/\.\.[\\/]|etc\/passwd/i.test(question) && has("read_file")) {
+        return Promise.resolve({
+          content: null,
+          toolCalls: [
+            {
+              id: nextId(),
+              name: "read_file",
+              arguments: JSON.stringify({ path: "../../etc/passwd" }),
+            },
+          ],
+        });
+      }
+      if (/\bDROP\s+TABLE\b/i.test(question) && has("db_query")) {
+        return Promise.resolve({
+          content: null,
+          toolCalls: [
+            {
+              id: nextId(),
+              name: "db_query",
+              arguments: JSON.stringify({ query: "DROP TABLE reports" }),
+            },
+          ],
+        });
+      }
+      // Error-recovery input: query a column that does not exist, then
+      // correct itself on the next round (see below).
+      if (/citation/i.test(question) && has("db_query")) {
+        return Promise.resolve({
+          content: null,
+          toolCalls: [
+            {
+              id: nextId(),
+              name: "db_query",
+              arguments: JSON.stringify({
+                query: "SELECT title, citations FROM reports ORDER BY published_at DESC",
+              }),
+            },
+          ],
+        });
+      }
       const calls = [];
       if (has("web_search")) {
         calls.push({
           id: nextId(),
           name: "web_search",
-          arguments: JSON.stringify({ query: String(userQuestion).slice(0, 120), max_results: 3 }),
+          arguments: JSON.stringify({ query: question.slice(0, 120), max_results: 3 }),
         });
       }
       if (has("db_query")) {
@@ -42,7 +96,28 @@ export class StubLLM implements LLMClient {
       }
     }
 
-    if (toolRounds > 0 && has("write_file") && !alreadyWrote(messages)) {
+    // Error-recovery: retry once with real columns after the bad query.
+    if (
+      toolRounds === 1 &&
+      /citation/i.test(question) &&
+      toolCallsBy("db_query") === 1 &&
+      has("db_query")
+    ) {
+      return Promise.resolve({
+        content: null,
+        toolCalls: [
+          {
+            id: nextId(),
+            name: "db_query",
+            arguments: JSON.stringify({
+              query: "SELECT title, author, published_at FROM reports ORDER BY published_at DESC LIMIT 5",
+            }),
+          },
+        ],
+      });
+    }
+
+    if (toolRounds > 0 && has("write_file") && !alreadyWrote(messages) && !adversarial) {
       return Promise.resolve({
         content: null,
         toolCalls: [
@@ -59,10 +134,13 @@ export class StubLLM implements LLMClient {
     }
 
     return Promise.resolve({
-      content:
-        "Stub answer: gathered evidence via MCP tools and persisted a report " +
-        "to reports/research-summary.md inside the sandbox. (Run with " +
-        "OPENAI_API_KEY set for a live model.)",
+      content: adversarial
+        ? "Stub answer: the requested operation was rejected by the server's " +
+            "guardrails; nothing unsafe was executed. (Run with OPENAI_API_KEY " +
+            "set for a live model.)"
+        : "Stub answer: gathered evidence via MCP tools and persisted a report " +
+            "to reports/research-summary.md inside the sandbox. (Run with " +
+            "OPENAI_API_KEY set for a live model.)",
       toolCalls: [],
     });
   }

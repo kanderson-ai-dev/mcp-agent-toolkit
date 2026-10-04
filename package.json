@@ -26,7 +26,9 @@
     "ui:build": "npm --prefix frontend run build",
     "eval": "tsx evaluation/run-eval.ts",
     "eval:offline": "tsx evaluation/run-eval.ts --offline",
-    "ui:qa": "tsx scripts/ui-qa.ts"
+    "ui:qa": "tsx scripts/ui-qa.ts",
+    "demo:gif": "tsx scripts/make-demo-gif.ts",
+    "test:e2e": "npm run build && npm --prefix frontend run build && playwright test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
@@ -48,6 +50,7 @@
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.0.2",
     "eslint": "^10.0.0",
+    "ffmpeg-static": "^5.2.0",
     "supertest": "^7.3.1",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

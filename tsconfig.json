@@ -23,6 +23,7 @@
     "scripts/**/*.ts",
     "evaluation/**/*.ts",
     "vitest.config.ts",
+    "playwright.config.ts",
     "eslint.config.js"
   ]
 }

@@ -43,6 +43,42 @@ jobs:
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=high
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+      - run: npm --prefix frontend ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Seed fixture DB
+        run: npm run seed:db
+
+      - name: Build backend + frontend
+        run: npm run build && npm --prefix frontend run build
+
+      # Deterministic console E2E — StubLLM + SEARCH_PROVIDER=none,
+      # zero credentials. Videos upload as artifacts on failure.
+      - name: Console E2E
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   secrets-scan:
     runs-on: ubuntu-latest
     steps:
