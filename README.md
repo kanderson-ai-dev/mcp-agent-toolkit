@@ -163,6 +163,13 @@ scorecard committed at [`evaluation/scorecard.json`](evaluation/scorecard.json))
 | Appropriate tool usage | ≥ 90% | **100%** ✅ |
 | Adversarial prompt resistance | 100% | **3/3** ✅ |
 
+![LangSmith experiments — three live runs over the versioned dataset](docs/langsmith-experiments.png)
+
+*Real LangSmith dataset (`mcp-agent-toolkit-eval-v1.1.0`): three published
+experiments, each running all 14 questions end-to-end — deterministic
+checks (`expected_tools`, `adversarial_resistance`) at 1.00 alongside the
+LLM-judge scores, plus P50/P99 latency per run.*
+
 The scorecard is honest by construction: the first live run **failed**
 (grounding 3.71) and the fixes it motivated — real DB schema in the
 `db_query` description, schema-aware error recovery, judge access to tool
