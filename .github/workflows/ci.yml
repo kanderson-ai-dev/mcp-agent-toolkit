@@ -22,14 +22,20 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
       - run: npm ci
+      # frontend/ is its own package — the root lint ignores it, so its
+      # lint+typecheck gates run explicitly here.
+      - run: npm --prefix frontend ci
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint && npm --prefix frontend run lint
 
       - name: Typecheck (strict)
-        run: npm run typecheck
+        run: npm run typecheck && npm --prefix frontend run typecheck
 
       - name: Tests + coverage (offline, no secrets)
         run: npm run test:cov
@@ -52,6 +58,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
       - run: npm ci
       - run: npm --prefix frontend ci

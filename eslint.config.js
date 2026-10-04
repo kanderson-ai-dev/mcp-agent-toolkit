@@ -3,7 +3,20 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/", "coverage/", "node_modules/", "data/", "docs/"],
+    // frontend/ is a separate package with its own eslint.config.js +
+    // toolchain — lint it via `npm --prefix frontend run lint` (CI does).
+    // Ignoring it here also stops eslint from loading that nested config,
+    // whose plugins only exist under frontend/node_modules.
+    ignores: [
+      "dist/",
+      "coverage/",
+      "node_modules/",
+      "data/",
+      "docs/",
+      "frontend/",
+      "playwright-report/",
+      "test-results/",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
