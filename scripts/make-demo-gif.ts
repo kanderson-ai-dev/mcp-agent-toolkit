@@ -27,6 +27,8 @@ const DEMO_QUESTION =
   "What security reports do we have in the database, and what does the web " +
   "say about security in MCP? Save me a combined briefing in `reports/security-briefing.md`.";
 const SETTLE_MS = 1_600;
+const INTRO_MS = 3_500;
+const TYPE_DELAY_MS = 14;
 const RUN_TIMEOUT_MS = 120_000;
 
 async function waitForHealth(timeoutMs = 60_000): Promise<void> {
@@ -70,8 +72,13 @@ async function main(): Promise<void> {
     const page = await context.newPage();
     await page.goto(BASE, { waitUntil: "networkidle" });
 
+    // Hold on the empty console long enough for a viewer to read it,
+    // then type the question visibly rather than pasting it instantly.
+    await page.waitForTimeout(INTRO_MS);
     const composer = page.getByLabel("Question for the agent");
-    await composer.fill(DEMO_QUESTION);
+    await composer.click();
+    await composer.pressSequentially(DEMO_QUESTION, { delay: TYPE_DELAY_MS });
+    await page.waitForTimeout(600);
     await page.getByLabel("Send question").click();
     await waitForRunEnd(composer, RUN_TIMEOUT_MS);
 
@@ -87,12 +94,12 @@ async function main(): Promise<void> {
       throw new Error("Playwright produced no video file");
     }
 
-    // webm → gif: 10 fps, 1000px wide, single-pass palette for quality.
+    // webm → gif: 8 fps, 960px wide, single-pass palette for quality.
     const args = [
       "-y",
       "-i", webmPath,
       "-vf",
-      "fps=10,scale=1000:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4",
+      "fps=8,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4",
       "-loop", "0",
       OUT_GIF,
     ];
