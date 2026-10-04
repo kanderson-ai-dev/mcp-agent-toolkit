@@ -87,12 +87,12 @@ async function main(): Promise<void> {
       throw new Error("Playwright produced no video file");
     }
 
-    // webm → gif: 12 fps, 1100px wide, single-pass palette for quality.
+    // webm → gif: 10 fps, 1000px wide, single-pass palette for quality.
     const args = [
       "-y",
       "-i", webmPath,
       "-vf",
-      "fps=12,scale=1100:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4",
+      "fps=10,scale=1000:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4",
       "-loop", "0",
       OUT_GIF,
     ];

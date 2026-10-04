@@ -1,3 +1,16 @@
+# ── frontend build stage ─────────────────────────────────────────────────
+# The web console (src/web) serves frontend/dist/ statically — build it in
+# its own stage so the agent-only path stays untouched and the web service
+# ships a real production bundle.
+FROM node:22-alpine AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+# Example chips are injected at build time from the versioned eval dataset.
+COPY evaluation/dataset.json /app/evaluation/dataset.json
+RUN npm run build
+
 # ── build stage ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -29,6 +42,8 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/data/demo.db ./data/demo.db
 COPY --from=build /app/data/sandbox ./data/sandbox
+# Web console static bundle — src/web serves this when present.
+COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 # The sandbox dir is the only writable surface the tools can touch.
 RUN chown -R node:node /app/data

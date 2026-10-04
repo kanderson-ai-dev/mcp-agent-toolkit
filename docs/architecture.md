@@ -10,6 +10,8 @@ discovers tools at runtime via `tools/list` and invokes them via
 graph LR
     subgraph client["Agent client (this repo)"]
         CLI[CLI entry] --> LOOP[Agent loop<br/>OpenAI tool calling]
+        BROWSER[Browser<br/>React console] -->|POST /api/chat<br/>GET /api/chat/stream SSE| WEB[Express adapter<br/>run store · SSE]
+        WEB --> LOOP
         LOOP --> MC[MCP client<br/>StdioClientTransport]
         LOOP -.->|no OPENAI_API_KEY| STUB[StubLLM<br/>deterministic script]
         LOOP -->|chat.completions| OAI[(OpenAI API)]
@@ -37,6 +39,20 @@ graph LR
     T3 --> EXT3[(data/sandbox/<br/>only)]
     T4 --> EXT3
 ```
+
+## Surfaces — CLI vs Web console
+
+Both surfaces drive the **same** `runAgent` loop and the same MCP child
+process — no agent logic is duplicated; the web layer is a thin adapter.
+
+| | CLI (`npm run agent`) | Web console (`npm run web`) |
+|---|---|---|
+| Entry point | `src/client/index.ts` | `src/web/index.ts` |
+| Surface | Terminal event stream (pretty/JSON) | Browser UI — React + Tailwind (`frontend/`) |
+| Transport to the loop | Direct `emit` callback | HTTP + SSE (`POST /api/chat` → `GET /api/chat/stream`) |
+| MCP server | Spawned per CLI invocation | One child process shared for the server lifetime |
+| Concurrency | One run per invocation | Run store: single-use, TTL-expired run ids |
+| Auth | n/a — local process | **None — local single-user console** (see `SECURITY.md`) |
 
 ## Tool inventory
 

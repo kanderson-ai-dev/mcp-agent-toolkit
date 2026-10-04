@@ -13,13 +13,15 @@
 [![Type checked: tsc](https://img.shields.io/badge/type%20checked-tsc--strict-blue)](https://www.typescriptlang.org/tsconfig#strict)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Recorded demo — agent ↔ MCP server over stdio](docs/demo.gif)
+![Recorded demo — web console: tool timeline, guardrails, cited answer](docs/web-demo.gif)
 
-*Real run, live OpenAI tool-calling loop — watch it discover the tools, hit
-a real SQL error (`no such column: category`), retry with the correct
-schema, search the live web, and write a cited report into the sandbox.
-Full transcript: [`docs/demo-transcript.txt`](docs/demo-transcript.txt) —
-recorded via `npm run demo:record` (asciinema cast in
+*Real run in the web console — live OpenAI tool-calling loop over MCP
+stdio: the agent queries the seeded DB, searches the web, writes a report
+into the sandbox, and every step streams to the UI with labeled tool
+cards. Prefer the terminal? The same loop runs in the CLI —
+[`docs/demo.gif`](docs/demo.gif) +
+[`docs/demo-transcript.txt`](docs/demo-transcript.txt), recorded via
+`npm run demo:record` (asciinema cast in
 [`docs/demo.cast`](docs/demo.cast)).*
 
 </div>
@@ -131,15 +133,41 @@ build rather than being shrugged off:
 
 | Dimension | Metric | Threshold | Latest run |
 |---|---|---|---|
-| Test suite | unit + security + real-stdio integration | 100% green | 110/110 ✅ |
-| Coverage | lines / branches / functions / statements | ≥ 85% each | 98.5 / 85.1 / 100 / 97.5 ✅ |
+| Test suite | unit + security + real-stdio integration | 100% green | 137/137 ✅ |
+| Coverage | lines / branches / functions / statements | ≥ 85% each | 98.2 / 86.8 / 100 / 97.5 ✅ |
 | Type safety | `tsc --strict` | 0 errors | ✅ |
 | Lint | `eslint` strict (typescript-eslint) | 0 warnings | ✅ |
 | Security suite | traversal · write SQL · injection · rate-limit rejections | all must **fail loudly** | ✅ |
+| UI E2E | Playwright — 7 dataset questions + raw-field-name ban | 100% green | 9/9 ✅ |
 | Dependency audit | `npm audit --omit=dev` | 0 high/critical | ✅ |
 
-Reproduce: `npm run test:cov` (coverage gate), `npm run verify`-equivalent
-sequence in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Code quality is necessary but not sufficient — an agent can pass every
+lint rule and still answer badly. So the product itself is evaluated with
+a versioned dataset ([`evaluation/dataset.json`](evaluation/dataset.json),
+v1.1.0 — 14 questions across multi-tool, single-tool, error recovery,
+adversarial and ambiguous categories) and an **independent LLM-as-judge**
+(a separate prompt and call that sees the transcript, tool outputs and a
+reference answer — never the agent's own system prompt). Latest real run
+(`npm run eval`, `gpt-4o-mini`, traced and published to LangSmith —
+scorecard committed at [`evaluation/scorecard.json`](evaluation/scorecard.json)):
+
+| Dimension | Threshold | Score |
+|---|---|---|
+| Task success | ≥ 4.0 / 5 | **4.93** ✅ |
+| Grounding & citation quality | ≥ 4.0 / 5 | **4.43** ✅ |
+| Appropriate tool usage | ≥ 90% | **100%** ✅ |
+| Adversarial prompt resistance | 100% | **3/3** ✅ |
+
+The scorecard is honest by construction: the first live run **failed**
+(grounding 3.71) and the fixes it motivated — real DB schema in the
+`db_query` description, schema-aware error recovery, judge access to tool
+outputs and reference answers — are what the current numbers reflect.
+See [`evaluation/README.md`](evaluation/README.md) for the rubric and
+`npm run eval:offline` for the deterministic harness smoke test.
+
+Reproduce: `npm run test:cov` (coverage gate), `npm run test:e2e`
+(Playwright UI suite), `npm run eval` (live judge — needs
+`OPENAI_API_KEY`, publishes to LangSmith when `LANGCHAIN_API_KEY` is set).
 
 ---
 
@@ -226,9 +254,15 @@ with `contents: read`. Full threat model and mechanism table:
 npm ci
 cp .env.example .env        # optional — paste OPENAI_API_KEY for the live loop
 npm run seed:db             # fixture DB for db_query (8 reports)
+npm run web                 # web console → http://localhost:3000
 npm run demo                # recorded E2E: seeds + runs, saves transcript
 npm run agent -- "your question"
 ```
+
+The web console (`npm run web`) builds `frontend/`, serves it on
+`WEB_PORT` and streams each run over SSE: typed tool cards, guardrail
+outcomes and a markdown final answer — **local, single-user, no auth**
+(see [`SECURITY.md`](SECURITY.md)).
 
 Degrades cleanly with zero secrets: no `OPENAI_API_KEY` → deterministic
 `StubLLM`; no `SEARCH_API_KEY` → keyless DuckDuckGo; `SEARCH_PROVIDER=none`
@@ -238,6 +272,7 @@ Degrades cleanly with zero secrets: no `OPENAI_API_KEY` → deterministic
 docker compose up                    # runs the default demo question once
 docker compose run --rm agent "…"    # custom question
 docker compose run --rm agent --stub "offline run, no keys"
+docker compose up web                # web console on http://localhost:3000
 ```
 
 The image is multi-stage (non-root `node` user), seeds the fixture DB at
@@ -264,6 +299,11 @@ baked in.
 | `LOG_LEVEL` | no | — | pino level; logs go to stderr |
 | `METRICS_PORT` | no | — | Empty = disabled; e.g. `9108` → `/metrics` HTTP |
 | `OUTPUT_FORMAT` | no | — | `pretty` \| `json` agent event stream |
+| `WEB_PORT` | no | — | Web console port (default `3000`) |
+| `WEB_CORS_ORIGIN` | no | — | Allowed origin for `/api/chat` (default `http://localhost:5173`) |
+| `LANGCHAIN_API_KEY` | no | ✅ | LangSmith tracing + experiment publishing |
+| `LANGCHAIN_TRACING_V2` | no | — | `true` enables LangSmith in `npm run eval` |
+| `LANGCHAIN_PROJECT` | no | — | LangSmith project (default `mcp-agent-toolkit`) |
 
 Never commit secrets. See [`.env.example`](.env.example) for the full,
 commented template.
@@ -282,13 +322,22 @@ src/
 │   ├── agent-loop.ts  #   tool-calling loop (bounded, must terminate)
 │   ├── events.ts      #   structured event stream (pretty|json)
 │   └── llm/           #   OpenAI impl + deterministic StubLLM
+├── web/               # Express adapter — /api/chat + SSE, run store,
+│                      #   serves the built frontend
 └── shared/            # config (env > .env, empty secrets = absent),
                        # ToolError + result envelopes
-scripts/               # seed-db.ts, demo.ts (transcript), record-demo.ts (cast)
-tests/                 # 110 tests — unit, security, real-stdio integration
-docs/                  # architecture.md, demo.gif + demo.cast (real recording)
+frontend/              # React + Vite + Tailwind console (own package.json)
+evaluation/            # versioned dataset, LLM-as-judge, LangSmith runs,
+                       #   scorecard.json (real run) + README (rubric)
+scripts/               # seed-db.ts, demo.ts, record-demo.ts, ui-qa.ts,
+                       #   make-demo-gif.ts
+tests/                 # 137 tests — unit, security, real-stdio integration
+tests/e2e/             # Playwright: 7 dataset questions + raw-field ban
+docs/                  # architecture.md, web-demo.gif, demo.gif + demo.cast,
+                       #   ui-qa/ screenshots
 data/sandbox/          # the ONLY writable surface for the fs tools
-.github/workflows/     # CI: lint → typecheck → tests+coverage → build → audit
+.github/workflows/     # CI: lint → typecheck → tests+coverage → build
+                       #   → Playwright E2E → audit + gitleaks
 ```
 
 ## 🧪 Verification
@@ -296,23 +345,30 @@ data/sandbox/          # the ONLY writable surface for the fs tools
 ```bash
 npm run lint           # eslint — 0 warnings
 npm run typecheck      # tsc --noEmit strict — 0 errors
-npm run test:cov       # 110 tests offline; ≥85% all metrics (actual ~98.5% lines)
-npm run build          # compile to dist/
+npm run test:cov       # 137 tests offline; ≥85% all metrics (~98% lines)
+npm run build          # compile to dist/ (backend)
+npm run test:e2e       # Playwright UI suite — offline, deterministic
+npm run eval:offline   # eval harness smoke test (StubLLM)
+npm run eval           # real dataset + LLM judge (needs OPENAI_API_KEY)
 npm audit --omit=dev   # 0 vulnerabilities
 ```
 
 CI (`.github/workflows/ci.yml`): lint → typecheck → tests+coverage → build
-→ `npm audit` + `gitleaks`, on `pull_request`, Node 20/22/24 matrix,
-`permissions: contents: read`. A fork passes with zero secrets.
+→ Playwright E2E → `npm audit` + `gitleaks`, on `pull_request`, Node
+20/22/24 matrix, `permissions: contents: read`. A fork passes with zero
+secrets — the E2E job runs on `StubLLM` + `SEARCH_PROVIDER=none`.
 
 ## 🛠️ Stack
 
 Node 20+ · TypeScript 5 strict ESM · `@modelcontextprotocol/sdk` (stdio
 transport, `tools/list`/`tools/call`, `_meta` correlation) · OpenAI
-tool-calling (`chat.completions`) · `better-sqlite3` (readonly fixture DB)
-· `zod` (input schemas) · `pino` (JSON logs) · `@prometheus-io/client`
-(metrics) · Vitest + `@vitest/coverage-v8` · ESLint 10 +
-typescript-eslint · Docker multi-stage.
+tool-calling (`chat.completions`) · Express 5 + SSE (web adapter) ·
+React 19 + Vite + Tailwind CSS 4 + `lucide-react` (web console) ·
+`better-sqlite3` (readonly fixture DB) · `zod` (input schemas) · `pino`
+(JSON logs) · `@prometheus-io/client` (metrics) · Vitest +
+`@vitest/coverage-v8` · Playwright (UI E2E, deterministic offline) ·
+LangSmith (`langsmith` — tracing, datasets, LLM-as-judge experiments) ·
+ESLint 10 + typescript-eslint · Docker multi-stage.
 
 ## Known limitations & next steps
 
@@ -324,12 +380,21 @@ typescript-eslint · Docker multi-stage.
 - **Keyless search quality.** DuckDuckGo HTML scraping is the honest
   zero-cost fallback; a paid provider (Tavily) is a `SEARCH_PROVIDER` flip
   away and returns richer results.
-- **No streaming token UX.** The event stream is structured JSON/pretty
-  lines; an SSE surface for a browser console is a natural next step
-  (`AgentEvent` union is already shaped for it).
+- **Web console is local and single-user.** No authentication or
+  authorization — one shared MCP process, one rate-limit budget. Safe for
+  `localhost`; exposing it beyond your machine means putting it behind an
+  auth layer or reverse proxy first (see [`SECURITY.md`](SECURITY.md)).
+- **Evaluation reflects the fixture world.** The 14-question dataset
+  exercises the seeded 8-row DB and sandboxed FS — a strong signal for
+  tool-use correctness on this surface, not a general capability claim.
+  Judge scores carry LLM judge noise run-to-run; thresholds are averages,
+  not per-question guarantees.
 - **SQLite-centric SQL guard.** `db_query` assumes SQLite semantics;
   porting to Postgres would add role-level `GRANT SELECT` as a third
   enforcement layer.
+- **Token-level streaming.** The SSE stream emits structured run/tool
+  events; streaming partial assistant tokens to the UI is a natural next
+  step.
 
 ---
 

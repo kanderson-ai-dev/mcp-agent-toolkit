@@ -18,5 +18,24 @@ services:
     #   docker compose run --rm agent "your question here"
     #   docker compose run --rm agent --stub "offline run, no keys needed"
 
+  web:
+    build: .
+    image: mcp-agent-toolkit
+    # The image ENTRYPOINT is the agent CLI — override it entirely.
+    entrypoint: ["node", "dist/web/index.js"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      WEB_PORT: "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - sandbox-data:/app/data/sandbox
+    # Usage:
+    #   docker compose up web            # web console on http://localhost:3000
+    #   Local, single-user, unauthenticated — see SECURITY.md before
+    #   exposing the port beyond your machine.
+
 volumes:
   sandbox-data:
