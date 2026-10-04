@@ -93,6 +93,8 @@ counted in Prometheus metrics.
 graph LR
     subgraph client["Agent client"]
         CLI[CLI entry] --> LOOP[Agent loop<br/>OpenAI tool calling]
+        BROWSER[Browser<br/>React console] -->|HTTP + SSE| WEB[Express adapter]
+        WEB --> LOOP
         LOOP --> MC[MCP client<br/>StdioClientTransport]
         LOOP -.->|no OPENAI_API_KEY| STUB[StubLLM<br/>deterministic]
         LOOP -->|chat.completions| OAI[(OpenAI API)]
@@ -119,6 +121,9 @@ graph LR
     T2 --> EXT2[(SQLite<br/>readonly)]
     T3 --> EXT3[(data/sandbox/)]
     T4 --> EXT3
+
+    style client fill:transparent,stroke:#8b949e,stroke-dasharray:5 5
+    style server fill:transparent,stroke:#8b949e,stroke-dasharray:5 5
 ```
 
 Full rationale and the tool/guardrail matrix:

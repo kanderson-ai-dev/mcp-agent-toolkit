@@ -38,6 +38,11 @@ graph LR
     T2 --> EXT2[(SQLite<br/>data/demo.db<br/>readonly)]
     T3 --> EXT3[(data/sandbox/<br/>only)]
     T4 --> EXT3
+
+    %% Transparent fill + neutral dashed border: renders cleanly on both
+    %% GitHub light and dark themes (default subgraph fill is a gray box).
+    style client fill:transparent,stroke:#8b949e,stroke-dasharray:5 5
+    style server fill:transparent,stroke:#8b949e,stroke-dasharray:5 5
 ```
 
 ## Surfaces — CLI vs Web console
