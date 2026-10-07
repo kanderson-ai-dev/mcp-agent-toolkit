@@ -421,10 +421,9 @@ protocol — with sandboxing, injection defenses, audit-grade logging and a
 test suite that proves the guardrails fail loudly — this codebase is the
 working template.
 
-This project is the protocol layer underneath the Agentic AI portfolio
-ladder (`agentic-api` → `agentic-rag-system` → `agentic-web-researcher` →
-`langgraph-multiagent-orchestrator`): the open standard those agents
-consume tools through, implemented end-to-end.
+This same project can be adapted to your own systems: swap the four
+tools for your internal APIs, databases or file surfaces and the
+guardrails, agent loop and observability carry over unchanged.
 
 ## 📄 License
 
