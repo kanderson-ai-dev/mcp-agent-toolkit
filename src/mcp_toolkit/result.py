@@ -18,8 +18,7 @@ ToolErrorCode = Literal[
     "forbidden",
     "not_found",
     "rate_limited",
-    "too_large",
-    "upstream_error",
+    "upstream",
     "internal",
 ]
 
@@ -64,5 +63,7 @@ def error_result(exc: BaseException) -> ErrEnvelope:
 
 
 def envelope_json(envelope: OkEnvelope | ErrEnvelope) -> str:
-    """Serialize an envelope as the JSON text carried in MCP content."""
-    return envelope.model_dump_json()
+    """Serialize an envelope as the JSON text carried in MCP content.
+
+    Pretty-printed with indent 2, matching the oracle wire format."""
+    return envelope.model_dump_json(indent=2)

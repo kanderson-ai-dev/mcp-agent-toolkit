@@ -51,8 +51,8 @@ class TestToolError:
 
 class TestErrorResult:
     def test_tool_error_maps_to_its_code(self) -> None:
-        env = error_result(ToolError("too_large", "File too large"))
-        assert env.code == "too_large"
+        env = error_result(ToolError("upstream", "Tavily responded HTTP 502"))
+        assert env.code == "upstream"
 
     def test_unknown_exception_maps_to_internal(self) -> None:
         env = error_result(ValueError("boom"))
