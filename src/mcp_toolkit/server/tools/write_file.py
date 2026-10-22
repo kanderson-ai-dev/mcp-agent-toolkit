@@ -38,6 +38,7 @@ def create_write_file_tool(sandbox_root: str | Path, max_bytes: int) -> ToolDef:
             raise ToolError(
                 "invalid_input",
                 f"Content too large: {n_bytes} bytes (limit {max_bytes})",
+                guardrail="file_size_limit",
             )
         resolved = resolve_in_sandbox(root, path)
         canonical = realpath_in_sandbox(root, resolved)

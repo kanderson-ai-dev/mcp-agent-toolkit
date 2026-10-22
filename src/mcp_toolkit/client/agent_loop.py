@@ -13,6 +13,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import structlog
+
 from mcp_toolkit.client.events import (
     AgentEvent,
     FinalEvent,
@@ -31,6 +33,9 @@ from mcp_toolkit.client.llm.types import (
     UserMessage,
 )
 from mcp_toolkit.client.mcp_client import ToolInvoker
+from mcp_toolkit.observability.metrics import Metrics
+
+_log = structlog.get_logger("mcp_toolkit.client.agent")
 
 AGENT_SYSTEM_PROMPT = "\n".join(
     [
@@ -58,6 +63,7 @@ class AgentLoopDeps:
     tools: list[OpenAIToolDef]
     max_iterations: int
     emit: Callable[[AgentEvent], None]
+    metrics: Metrics | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +103,7 @@ async def run_agent(user_prompt: str, deps: AgentLoopDeps) -> AgentRunResult:
                     terminated_by="answer",
                 )
             )
+            _record_run(deps, "answer", iteration)
             return AgentRunResult(
                 content=content,
                 iterations=iteration,
@@ -120,7 +127,17 @@ async def run_agent(user_prompt: str, deps: AgentLoopDeps) -> AgentRunResult:
                     args=args,
                 )
             )
+            # The same request_id reaches the event stream, this client
+            # log line, and (via params._meta.requestId) the server log.
+            _log.info("agent_tool_call", tool=call.name, request_id=request_id, iteration=iteration)
             outcome = await deps.invoker.call(call.name, args, request_id)
+            _log.info(
+                "agent_tool_result",
+                tool=call.name,
+                request_id=request_id,
+                ok=outcome.ok,
+                duration_ms=outcome.duration_ms,
+            )
             deps.emit(
                 ToolResultEvent(
                     iteration=iteration,
@@ -145,9 +162,20 @@ async def run_agent(user_prompt: str, deps: AgentLoopDeps) -> AgentRunResult:
             terminated_by="iteration_limit",
         )
     )
+    _record_run(deps, "iteration_limit", deps.max_iterations)
     return AgentRunResult(
         content=content,
         iterations=deps.max_iterations,
         tool_calls=tool_call_count,
         terminated_by="iteration_limit",
+    )
+
+
+def _record_run(deps: AgentLoopDeps, terminated_by: str, iterations: int) -> None:
+    if deps.metrics is not None:
+        deps.metrics.record_agent_run(terminated_by, iterations)
+    _log.info(
+        "agent_run_finished",
+        terminated_by=terminated_by,
+        iterations=iterations,
     )

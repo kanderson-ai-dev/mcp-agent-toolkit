@@ -47,6 +47,7 @@ def create_read_file_tool(sandbox_root: str | Path, max_bytes: int) -> ToolDef:
             raise ToolError(
                 "invalid_input",
                 f"File too large: {stat.st_size} bytes (limit {max_bytes})",
+                guardrail="file_size_limit",
             )
         content = await asyncio.to_thread(_read, canonical)
         return {

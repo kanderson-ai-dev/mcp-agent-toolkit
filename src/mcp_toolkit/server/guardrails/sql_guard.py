@@ -51,15 +51,18 @@ def assert_read_only_select(sql: str) -> None:
     cleaned = _strip_comments(sql).strip()
     cleaned = _TRAILING_JUNK.sub("", cleaned)  # tolerate trailing ;/whitespace
     if cleaned == "":
-        raise ToolError("invalid_input", "Empty SQL statement")
+        raise ToolError("invalid_input", "Empty SQL statement", guardrail="sql_guard")
     inspection = _inspection_form(cleaned)
     if ";" in inspection:
-        raise ToolError("forbidden", "Only a single SELECT statement is allowed")
+        raise ToolError(
+            "forbidden", "Only a single SELECT statement is allowed", guardrail="sql_guard"
+        )
     if not _START.match(inspection):
-        raise ToolError("forbidden", "Only SELECT statements are allowed")
+        raise ToolError("forbidden", "Only SELECT statements are allowed", guardrail="sql_guard")
     hit = _FORBIDDEN_KEYWORDS.search(inspection)
     if hit:
         raise ToolError(
             "forbidden",
             f"Statement contains a forbidden keyword: {hit.group(1).upper()}",
+            guardrail="sql_guard",
         )

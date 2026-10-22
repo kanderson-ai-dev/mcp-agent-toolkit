@@ -19,6 +19,7 @@ from pydantic import Field
 
 from mcp_toolkit.config import Settings
 from mcp_toolkit.observability.logging import configure_logging, get_logger
+from mcp_toolkit.observability.metrics import Metrics, create_metrics
 from mcp_toolkit.server.guardrails.rate_limiter import RateLimiter
 from mcp_toolkit.server.invocation import InvocationDeps, guarded_invoke
 from mcp_toolkit.server.search import SearchProvider, create_search_provider
@@ -29,9 +30,14 @@ from mcp_toolkit.server.tools import build_tools
 class BuiltServer:
     server: MCPServer
     session_id: str
+    metrics: Metrics
 
 
-def build_server(settings: Settings, provider: SearchProvider | None = None) -> BuiltServer:
+def build_server(
+    settings: Settings,
+    provider: SearchProvider | None = None,
+    metrics: Metrics | None = None,
+) -> BuiltServer:
     configure_logging(settings.log_level)
     logger = get_logger("mcp_toolkit.server")
     # The server owns its sandbox root — the canonical-path check needs it
@@ -39,12 +45,14 @@ def build_server(settings: Settings, provider: SearchProvider | None = None) -> 
     settings.sandbox_root.mkdir(parents=True, exist_ok=True)
     limiter = RateLimiter(settings.rate_limit_per_minute)
     session_id = str(uuid.uuid4())
+    metrics = metrics if metrics is not None else create_metrics()
     tools = {t.name: t for t in build_tools(settings, provider or create_search_provider(settings))}
     deps = InvocationDeps(
         limiter=limiter,
         session_id=session_id,
         max_output_chars=settings.max_tool_output_chars,
         logger=logger,
+        metrics=metrics,
     )
 
     server = MCPServer(name="mcp-agent-toolkit", version="0.1.0")
@@ -105,4 +113,4 @@ def build_server(settings: Settings, provider: SearchProvider | None = None) -> 
             tools["write_file"], {"path": path, "content": content}, ctx, deps
         )
 
-    return BuiltServer(server=server, session_id=session_id)
+    return BuiltServer(server=server, session_id=session_id, metrics=metrics)

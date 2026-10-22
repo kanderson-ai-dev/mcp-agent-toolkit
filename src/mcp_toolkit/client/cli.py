@@ -12,12 +12,14 @@ import contextlib
 import sys
 from typing import Any
 
-from mcp_toolkit.client.agent_loop import run_agent
+from mcp_toolkit.client.agent_loop import AgentLoopDeps, run_agent
 from mcp_toolkit.client.events import LlmMessageEvent, format_event
 from mcp_toolkit.client.llm import create_llm
 from mcp_toolkit.client.mcp_client import McpAgentClient, server_env
 from mcp_toolkit.client.server_spawn import resolve_server_spawn
 from mcp_toolkit.config import get_settings, load_env_file
+from mcp_toolkit.observability.logging import configure_logging
+from mcp_toolkit.observability.metrics import create_metrics
 
 USAGE = """The agent spawns the MCP server over stdio, discovers its tools,
 and answers the question through an LLM tool-calling loop."""
@@ -43,6 +45,9 @@ async def _run(argv: list[str]) -> int:
 
     load_env_file()
     settings = get_settings()
+    # Client logs go to stderr — stdout stays reserved for the event
+    # stream, so --json output remains machine-parseable.
+    configure_logging(settings.log_level)
     if args.stub:
         settings = settings.model_copy(update={"llm_provider": "stub"})
     fmt = "json" if args.json else settings.output_format
@@ -55,6 +60,7 @@ async def _run(argv: list[str]) -> int:
     async with McpAgentClient.connect_stdio(spawn.command, spawn.args, env=server_env()) as mcp:
         tools = mcp.list_tools()
         llm = create_llm(settings)
+        metrics = create_metrics()
         emit(
             LlmMessageEvent(
                 iteration=0,
@@ -64,8 +70,6 @@ async def _run(argv: list[str]) -> int:
                 ),
             )
         )
-        from mcp_toolkit.client.agent_loop import AgentLoopDeps
-
         result = await run_agent(
             prompt,
             AgentLoopDeps(
@@ -74,6 +78,7 @@ async def _run(argv: list[str]) -> int:
                 tools=mcp.to_openai_tools(),
                 max_iterations=settings.max_tool_iterations,
                 emit=emit,
+                metrics=metrics,
             ),
         )
         return 0 if result.terminated_by == "answer" else 1

@@ -66,6 +66,7 @@ class RateLimiter:
                 "rate_limited",
                 f'Rate limit exceeded for tool "{tool_name}" '
                 f"({self._per_tool_limit}/min); retry after {retry}s",
+                guardrail="rate_limiter",
             )
         if len(self._kept("session")) >= self._session_limit:
             retry = self._retry_after("session")
@@ -73,6 +74,7 @@ class RateLimiter:
                 "rate_limited",
                 f"Session rate limit exceeded ({self._session_limit} calls/min); "
                 f"retry after {retry}s",
+                guardrail="rate_limiter",
             )
 
     def record(self, tool_name: str) -> None:

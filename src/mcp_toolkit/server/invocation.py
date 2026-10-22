@@ -7,12 +7,15 @@ through, in deliberate order:
 3. tool handler (args already schema-validated by the SDK),
 4. error → typed envelope (never a thrown protocol error),
 5. output sanitization + cap (tool output is untrusted data),
-6. structured log of the invocation.
+6. one structured log record + metric sample per invocation.
+
+The log record carries argument *shape* (type and size per field) — never
+raw values, so a ``write_file`` payload containing a pasted secret cannot
+leak through the logs.
 """
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from dataclasses import dataclass
@@ -22,6 +25,7 @@ import structlog
 from mcp.server.mcpserver.context import Context
 from mcp.types import CallToolResult, TextContent
 
+from mcp_toolkit.observability.metrics import Metrics
 from mcp_toolkit.observability.request_context import (
     bind_request_id,
     unbind_request_id,
@@ -44,6 +48,7 @@ class InvocationDeps:
     session_id: str
     max_output_chars: int
     logger: structlog.stdlib.BoundLogger | structlog.typing.FilteringBoundLogger
+    metrics: Metrics | None = None
 
 
 def extract_request_id(ctx: Context[Any, Any] | None) -> str:
@@ -68,13 +73,25 @@ def extract_request_id(ctx: Context[Any, Any] | None) -> str:
     return str(uuid.uuid4())
 
 
-def _preview(value: Any, max_chars: int = 500) -> str:
-    """Bounded single-line preview of tool args/output for the log line."""
-    try:
-        text = json.dumps(value, default=str)
-        return text if len(text) <= max_chars else f"{text[:max_chars]}…"
-    except (TypeError, ValueError):
-        return "[unserializable]"
+def _arg_shape(args: dict[str, Any]) -> dict[str, str]:
+    """Type+size per argument (``"str:42"``, ``"int"``, ``"list:3"``) —
+    never the values themselves. String lengths reveal nothing an
+    attacker could not already infer from the result."""
+    shape: dict[str, str] = {}
+    for key, value in args.items():
+        if isinstance(value, str):
+            shape[key] = f"str:{len(value)}"
+        elif isinstance(value, bool):
+            shape[key] = "bool"
+        elif isinstance(value, int | float):
+            shape[key] = type(value).__name__
+        elif isinstance(value, list | tuple | dict | set):
+            shape[key] = f"{type(value).__name__}:{len(value)}"
+        elif value is None:
+            shape[key] = "null"
+        else:
+            shape[key] = type(value).__name__
+    return shape
 
 
 async def guarded_invoke(
@@ -87,50 +104,54 @@ async def guarded_invoke(
     started = time.perf_counter()
     request_id = extract_request_id(ctx)
     token = bind_request_id(request_id)
-    log = deps.logger
-    fields: dict[str, Any] = {
-        "tool": tool.name,
-        "session_id": deps.session_id,
-    }
+    error_code: str | None = None
+    blocked_by: str | None = None
     try:
         try:
             deps.limiter.check(tool.name)
             deps.limiter.record(tool.name)
         except ToolError as exc:
-            log.warning(
-                "tool_invocation_rate_limited",
-                **fields,
-                ok=False,
-                error=str(exc),
-                duration_ms=round((time.perf_counter() - started) * 1000),
-            )
-            return _result(error_result(exc), deps)
-
-        try:
-            data = await tool.handler(
-                **args, ctx=ToolContext(request_id=request_id, session_id=deps.session_id)
-            )
-            result = _result(ok(data), deps)
-            log.info(
-                "tool_invocation",
-                **fields,
-                ok=not result.is_error,
-                input=_preview(args),
-                output=_preview([c.model_dump() for c in result.content]),
-                duration_ms=round((time.perf_counter() - started) * 1000),
-            )
-            return result
-        except Exception as exc:
-            # ToolError keeps its code; anything else is an internal failure.
+            error_code = exc.code
+            blocked_by = exc.guardrail or "rate_limiter"
             result = _result(error_result(exc), deps)
-            log.warning(
-                "tool_invocation_failed",
-                **fields,
-                ok=False,
-                error=str(exc),
-                duration_ms=round((time.perf_counter() - started) * 1000),
-            )
-            return result
+        else:
+            try:
+                data = await tool.handler(
+                    **args,
+                    ctx=ToolContext(request_id=request_id, session_id=deps.session_id),
+                )
+                result = _result(ok(data), deps)
+            except Exception as exc:
+                if isinstance(exc, ToolError):
+                    error_code = exc.code
+                    blocked_by = exc.guardrail
+                else:
+                    error_code = "internal"
+                result = _result(error_result(exc), deps)
+
+        duration_s = time.perf_counter() - started
+        succeeded = not result.is_error
+        if deps.metrics is not None:
+            deps.metrics.record_invocation(tool.name, succeeded, error_code, duration_s)
+            if blocked_by is not None:
+                deps.metrics.record_guardrail_block(blocked_by)
+        deps.logger.info(
+            "tool_invocation",
+            tool=tool.name,
+            session_id=deps.session_id,
+            request_id=request_id,
+            ok=succeeded,
+            error_code=error_code,
+            blocked_by=blocked_by,
+            args=_arg_shape(args),
+            output_chars=(
+                len(result.content[0].text)
+                if result.content and isinstance(result.content[0], TextContent)
+                else 0
+            ),
+            duration_ms=round(duration_s * 1000),
+        )
+        return result
     finally:
         unbind_request_id(token)
 

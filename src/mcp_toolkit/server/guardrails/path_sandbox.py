@@ -43,13 +43,15 @@ def resolve_in_sandbox(root: str | Path, rel: str) -> Path:
     absolute paths are still allowed when they resolve inside the root.
     """
     if "\x00" in rel:
-        raise ToolError("invalid_input", "Path contains a NUL byte")
+        raise ToolError("invalid_input", "Path contains a NUL byte", guardrail="path_sandbox")
     root_resolved = Path(os.path.abspath(os.fspath(root)))
     # os.path.join keeps an absolute rel as-is, like the oracle's resolve().
     resolved = Path(os.path.abspath(os.path.join(root_resolved, rel)))
     foreign_absolute = bool(_FOREIGN_ABSOLUTE.match(rel)) and not os.path.isabs(rel)
     if foreign_absolute or not _inside(root_resolved, resolved):
-        raise ToolError("forbidden", f"Path escapes the sandbox root: {rel}")
+        raise ToolError(
+            "forbidden", f"Path escapes the sandbox root: {rel}", guardrail="path_sandbox"
+        )
     return resolved
 
 
@@ -69,8 +71,12 @@ def realpath_in_sandbox(root: str | Path, candidate: str | Path) -> Path:
         missing.append(p.name)
         p = parent
     if not p.exists():
-        raise ToolError("forbidden", f"Path escapes the sandbox root: {candidate}")
+        raise ToolError(
+            "forbidden", f"Path escapes the sandbox root: {candidate}", guardrail="path_sandbox"
+        )
     real_ancestor = Path(os.path.realpath(p))
     if not _inside(real_root, real_ancestor):
-        raise ToolError("forbidden", "Path escapes the sandbox root via a link")
+        raise ToolError(
+            "forbidden", "Path escapes the sandbox root via a link", guardrail="path_sandbox"
+        )
     return real_ancestor.joinpath(*reversed(missing))

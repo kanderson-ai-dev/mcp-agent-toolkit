@@ -24,11 +24,17 @@ ToolErrorCode = Literal[
 
 
 class ToolError(Exception):
-    """A tool-level failure carrying a stable, machine-readable code."""
+    """A tool-level failure carrying a stable, machine-readable code.
 
-    def __init__(self, code: ToolErrorCode, message: str) -> None:
+    ``guardrail`` names the guardrail that rejected the call
+    (``rate_limiter``, ``sql_guard``, ``path_sandbox``,
+    ``file_size_limit``) so metrics can attribute the block; ``None``
+    for non-guardrail failures (upstream, internal, plain bad input)."""
+
+    def __init__(self, code: ToolErrorCode, message: str, *, guardrail: str | None = None) -> None:
         super().__init__(message)
         self.code = code
+        self.guardrail = guardrail
 
 
 class OkEnvelope(BaseModel):
