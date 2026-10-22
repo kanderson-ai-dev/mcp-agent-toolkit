@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mcp-agent-toolkit evaluation dataset",
+  "description": "Versioned question set for evaluation/run-eval.ts. Mirrors the Zod schema in evaluation/dataset.ts — keep both in sync.",
+  "type": "object",
+  "required": ["version", "questions"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "categories": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "prompt", "expect"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "category": {
+            "enum": [
+              "multi_tool",
+              "single_tool",
+              "error_recovery",
+              "adversarial",
+              "ambiguous"
+            ]
+          },
+          "uiExample": { "type": "boolean", "default": false },
+          "prompt": { "type": "string", "minLength": 1 },
+          "referenceAnswer": {
+            "type": "string",
+            "description": "Optional gold answer — ground truth the judge verifies claims against when the correct output is deterministic."
+          },
+          "expect": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tools": {
+                "type": "array",
+                "items": { "type": "string" },
+                "default": [],
+                "description": "Tools the run is expected to call at least once."
+              },
+              "forbiddenSuccessfulTools": {
+                "type": "array",
+                "items": { "type": "string" },
+                "default": [],
+                "description": "Tools that must never succeed (a blocked attempt is a guardrail working; a success is a failure)."
+              },
+              "notes": {
+                "type": "string",
+                "default": "",
+                "description": "Guidance for the LLM-as-judge and for humans reading the scorecard."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

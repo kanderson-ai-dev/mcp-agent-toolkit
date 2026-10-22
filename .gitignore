@@ -1,0 +1,33 @@
+# ── Python ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage/
+dist/
+build/
+*.egg-info/
+
+# ── Node / frontend ───────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# ── Playwright / E2E artifacts ────────────────────────────────────────
+playwright-report/
+test-results/
+
+# ── Secrets & runtime data ────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+data/*.db*
+data/prompt-registry/
+
+# ── Working docs (never reach the public repo) ────────────────────────
+PLAN.md
+AGENTS.md

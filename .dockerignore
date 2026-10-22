@@ -1,0 +1,36 @@
+# ── VCS & working docs ────────────────────────────────────────────────
+.git/
+.github/
+PLAN.md
+AGENTS.md
+
+# ── Secrets & runtime data ────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+data/*.db*
+data/prompt-registry/
+
+# ── Python caches / env ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage/
+*.egg-info/
+
+# ── Node / frontend artifacts ─────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# ── Tests, QA evidence & CI artifacts ─────────────────────────────────
+tests/
+playwright-report/
+test-results/
+docs/ui-qa/
+docs/functional-qa/
