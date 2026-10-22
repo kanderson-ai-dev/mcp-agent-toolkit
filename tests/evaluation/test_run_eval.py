@@ -51,7 +51,7 @@ def _deps() -> EvalDeps:
 async def test_run_question_records_tool_calls_from_events() -> None:
     out = await run_question(_deps(), "research MCP and save a report")
     assert out.terminated_by == "answer"
-    assert [c.tool for c in out.tool_calls] == ["web_search", "db_query", "write_file"]
+    assert [c.tool for c in out.tool_calls] == ["db_query", "web_search", "write_file"]
     assert all(c.ok for c in out.tool_calls)
 
 

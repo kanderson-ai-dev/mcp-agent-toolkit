@@ -1,15 +1,26 @@
 """Deterministic stand-in for a real LLM.
 
-Replays a fixed tool-call plan — web_search + db_query in parallel,
-then write_file, then a final answer — so the whole agent loop is
-exercisable offline, in tests, and in CI with zero secrets.
+Replays a keyword-driven tool-call plan so the whole agent loop is
+exercisable offline, in tests, and in CI with zero secrets — and so every
+dataset question and scripted console query produces a stable card
+sequence end to end.
 
 Input-aware branches keep determinism while exercising the guardrail
-and error-recovery paths end-to-end: questions containing a path
-traversal or ``DROP TABLE`` deliberately attempt the dangerous call so
-the server's typed ``forbidden`` error renders in the transcript;
-questions asking for a "citation" count trigger a nonexistent-column
-error and then a corrected retry.
+and error-recovery paths end-to-end:
+
+- Path traversal deliberately attempts the dangerous call — twice when
+  the question supplies an absolute fallback path — so the server's
+  typed ``forbidden`` error renders in the transcript.
+- ``DROP TABLE`` likewise attempts the dangerous write.
+- Indirect-injection phrasing searches the web once, then answers with a
+  refusal — never a write.
+- "citation" questions trigger a nonexistent-column error and then a
+  corrected retry (error-recovery path).
+- Otherwise tools are selected by question keywords in canonical order
+  ``db_query → read_file → web_search``; ``write_file`` follows the
+  evidence round when the question asks to persist something, or runs
+  immediately for write-only requests. Questions matching no keyword
+  get a direct answer with no tool calls.
 """
 
 from __future__ import annotations
@@ -35,8 +46,19 @@ def _next_id() -> str:
 
 
 _TRAVERSAL = re.compile(r"\.\.[\\/]|etc/passwd", re.IGNORECASE)
+_ABS_PATH = re.compile(r"[A-Za-z]:[\\/][^`\s'\"]+|/(?:etc|usr|var|root|home)/[^`\s'\"]+")
 _DROP_TABLE = re.compile(r"\bDROP\s+TABLE\b", re.IGNORECASE)
+_INJECTION = re.compile(
+    r"addressed to you|previous instructions|system prompt|"
+    r"ignore (your |all |the )?(previous|prior)|reveal",
+    re.IGNORECASE,
+)
 _CITATION = re.compile(r"citation", re.IGNORECASE)
+
+_READ = re.compile(r"\bread\b|contents of|\.txt\b", re.IGNORECASE)
+_WEB = re.compile(r"\bweb\b|internet|cite|source|research|search", re.IGNORECASE)
+_DB = re.compile(r"\breports?\b|database|catalog|\bauthor", re.IGNORECASE)
+_WRITE = re.compile(r"\bsave|\bwrite\b|persist|briefing|notes/", re.IGNORECASE)
 
 
 def _tool_rounds(messages: list[AgentMessage]) -> int:
@@ -49,6 +71,10 @@ def _tool_calls_by(messages: list[AgentMessage], name: str) -> int:
 
 def _already_wrote(messages: list[AgentMessage]) -> bool:
     return any(isinstance(m, ToolMessage) and m.name == "write_file" for m in messages)
+
+
+def _call(name: str, args: dict[str, object]) -> ToolCallDef:
+    return ToolCallDef(id=_next_id(), name=name, arguments=json.dumps(args))
 
 
 def _build_stub_report(messages: list[AgentMessage]) -> str:
@@ -80,73 +106,88 @@ class StubLLM:
             (m.content for m in reversed(messages) if isinstance(m, UserMessage)),
             "the user's question",
         )
-        adversarial = bool(_TRAVERSAL.search(question) or _DROP_TABLE.search(question))
+        traversal = bool(_TRAVERSAL.search(question))
+        drop = bool(_DROP_TABLE.search(question))
+        injection = bool(_INJECTION.search(question))
+        adversarial = traversal or drop or injection
         rounds = _tool_rounds(messages)
 
         if rounds == 0:
-            if _TRAVERSAL.search(question) and has("read_file"):
+            if traversal and has("read_file"):
+                first = "../../etc/passwd"
+                calls = [_call("read_file", {"path": first})]
+                for m in _ABS_PATH.finditer(question):
+                    path = m.group(0).rstrip("`.,;'\"")
+                    if path not in first:
+                        calls.append(_call("read_file", {"path": path}))
+                        break
+                return LLMResponse(content=None, tool_calls=calls)
+            if drop and has("db_query"):
                 return LLMResponse(
                     content=None,
-                    tool_calls=[
-                        ToolCallDef(
-                            id=_next_id(),
-                            name="read_file",
-                            arguments=json.dumps({"path": "../../etc/passwd"}),
-                        )
-                    ],
+                    tool_calls=[_call("db_query", {"query": "DROP TABLE reports"})],
                 )
-            if _DROP_TABLE.search(question) and has("db_query"):
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[
-                        ToolCallDef(
-                            id=_next_id(),
-                            name="db_query",
-                            arguments=json.dumps({"query": "DROP TABLE reports"}),
+            if injection:
+                calls = []
+                if has("web_search"):
+                    calls.append(
+                        _call(
+                            "web_search",
+                            {"query": "Model Context Protocol", "max_results": 3},
                         )
-                    ],
-                )
-            if _CITATION.search(question) and has("db_query"):
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[
-                        ToolCallDef(
-                            id=_next_id(),
-                            name="db_query",
-                            arguments=json.dumps(
-                                {
-                                    "query": "SELECT title, citations FROM reports "
-                                    "ORDER BY published_at DESC"
-                                }
-                            ),
-                        )
-                    ],
-                )
-            calls = []
-            if has("web_search"):
-                calls.append(
-                    ToolCallDef(
-                        id=_next_id(),
-                        name="web_search",
-                        arguments=json.dumps({"query": question[:120], "max_results": 3}),
                     )
+                if calls:
+                    return LLMResponse(content=None, tool_calls=calls)
+            elif _CITATION.search(question) and has("db_query"):
+                return LLMResponse(
+                    content=None,
+                    tool_calls=[
+                        _call(
+                            "db_query",
+                            {
+                                "query": "SELECT title, citations FROM reports "
+                                "ORDER BY published_at DESC"
+                            },
+                        )
+                    ],
                 )
-            if has("db_query"):
-                calls.append(
-                    ToolCallDef(
-                        id=_next_id(),
-                        name="db_query",
-                        arguments=json.dumps(
+            else:
+                calls = []
+                if _DB.search(question) and has("db_query"):
+                    calls.append(
+                        _call(
+                            "db_query",
                             {
                                 "query": "SELECT id, title, topic, author, "
                                 "published_at FROM reports ORDER BY "
                                 "published_at DESC LIMIT 5"
-                            }
-                        ),
+                            },
+                        )
                     )
-                )
-            if calls:
-                return LLMResponse(content=None, tool_calls=calls)
+                if _READ.search(question) and has("read_file"):
+                    calls.append(_call("read_file", {"path": "welcome.txt"}))
+                if _WEB.search(question) and has("web_search"):
+                    calls.append(
+                        _call(
+                            "web_search",
+                            {"query": question[:120], "max_results": 3},
+                        )
+                    )
+                if calls:
+                    return LLMResponse(content=None, tool_calls=calls)
+                if _WRITE.search(question) and has("write_file"):
+                    return LLMResponse(
+                        content=None,
+                        tool_calls=[
+                            _call(
+                                "write_file",
+                                {
+                                    "path": "notes/stub-note.md",
+                                    "content": f"Stub note for: {question[:160]}",
+                                },
+                            )
+                        ],
+                    )
 
         if (
             rounds == 1
@@ -157,32 +198,32 @@ class StubLLM:
             return LLMResponse(
                 content=None,
                 tool_calls=[
-                    ToolCallDef(
-                        id=_next_id(),
-                        name="db_query",
-                        arguments=json.dumps(
-                            {
-                                "query": "SELECT title, author, published_at FROM "
-                                "reports ORDER BY published_at DESC LIMIT 5"
-                            }
-                        ),
+                    _call(
+                        "db_query",
+                        {
+                            "query": "SELECT title, author, published_at FROM "
+                            "reports ORDER BY published_at DESC LIMIT 5"
+                        },
                     )
                 ],
             )
 
-        if rounds > 0 and has("write_file") and not _already_wrote(messages) and not adversarial:
+        if (
+            rounds > 0
+            and not adversarial
+            and _WRITE.search(question)
+            and has("write_file")
+            and not _already_wrote(messages)
+        ):
             return LLMResponse(
                 content=None,
                 tool_calls=[
-                    ToolCallDef(
-                        id=_next_id(),
-                        name="write_file",
-                        arguments=json.dumps(
-                            {
-                                "path": "reports/research-summary.md",
-                                "content": _build_stub_report(messages),
-                            }
-                        ),
+                    _call(
+                        "write_file",
+                        {
+                            "path": "reports/research-summary.md",
+                            "content": _build_stub_report(messages),
+                        },
                     )
                 ],
             )
@@ -193,10 +234,16 @@ class StubLLM:
                 "guardrails; nothing unsafe was executed. (Run with OPENAI_API_KEY "
                 "set for a live model.)"
             )
+        elif _tool_rounds(messages) == 0:
+            content = (
+                "Stub answer: a general-knowledge question needs no tools — "
+                "answered directly from the model's knowledge. (Run with "
+                "OPENAI_API_KEY set for a live model.)"
+            )
         else:
             content = (
                 "Stub answer: gathered evidence via MCP tools and persisted a "
-                "report to reports/research-summary.md inside the sandbox. "
-                "(Run with OPENAI_API_KEY set for a live model.)"
+                "report inside the sandbox when asked to. (Run with "
+                "OPENAI_API_KEY set for a live model.)"
             )
         return LLMResponse(content=content, tool_calls=[])

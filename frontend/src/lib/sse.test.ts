@@ -83,7 +83,8 @@ describe("streamRun", () => {
   });
 
   it("URL-encodes the runId", () => {
-    streamRun("a b&c", { onEvent: () => {}, onDone: () => {} });
+    const noop = vi.fn();
+    streamRun("a b&c", { onEvent: noop, onDone: noop });
     expect(FakeEventSource.instances[0]!.url).toBe(
       "/api/chat/stream?runId=a%20b%26c",
     );

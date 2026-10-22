@@ -59,6 +59,7 @@ export default function App() {
   const [phase, setPhase] = useState<ConsolePhase>("idle");
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [announcement, setAnnouncement] = useState("");
+  const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -183,7 +184,7 @@ export default function App() {
             </button>
           </div>
         ) : runs.length === 0 ? (
-          <EmptyState examples={EXAMPLES} onPick={handleSubmit} />
+          <EmptyState examples={EXAMPLES} onPick={setDraft} />
         ) : (
           <div className="space-y-8">
             {runs.map((run, i) => (
@@ -194,7 +195,12 @@ export default function App() {
         <div ref={bottomRef} />
       </main>
 
-      <PromptComposer disabled={phase === "streaming" || apiDown} onSubmit={handleSubmit} />
+      <PromptComposer
+        disabled={phase === "streaming" || apiDown}
+        value={draft}
+        onChange={setDraft}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

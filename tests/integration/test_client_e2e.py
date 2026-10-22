@@ -88,7 +88,7 @@ async def test_full_agent_loop_over_stdio(spawn_env: dict[str, str]) -> None:
         sys.executable, ["-m", "mcp_toolkit.server"], env=server_env()
     ) as mcp:
         result = await run_agent(
-            "What security reports do we have, and what does the web say?",
+            "What security reports do we have, what does the web say? Save a briefing.",
             AgentLoopDeps(
                 llm=StubLLM(),
                 invoker=mcp,
@@ -151,7 +151,7 @@ def test_cli_runs_stub_question_e2e(work_env: dict[str, str], tmp_path: Path) ->
             "-m",
             "mcp_toolkit.client.cli",
             "--stub",
-            "Summarize the reports in the database",
+            "Summarize the reports in the database and add web context",
         ],
         capture_output=True,
         text=True,

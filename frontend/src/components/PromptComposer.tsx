@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { SendHorizonal } from "lucide-react";
 import clsx from "clsx";
 
@@ -6,6 +6,9 @@ const MAX_CHARS = 2000;
 
 interface PromptComposerProps {
   disabled: boolean;
+  /** Controlled draft — lifted so example chips can fill (not submit). */
+  value: string;
+  onChange: (value: string) => void;
   onSubmit: (question: string) => void;
 }
 
@@ -13,8 +16,7 @@ interface PromptComposerProps {
  * Sticky bottom composer — Enter sends, Shift+Enter inserts a newline.
  * Disabled while a run is streaming (one run at a time).
  */
-export function PromptComposer({ disabled, onSubmit }: PromptComposerProps) {
-  const [value, setValue] = useState("");
+export function PromptComposer({ disabled, value, onChange, onSubmit }: PromptComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const remaining = MAX_CHARS - value.length;
   const canSend = !disabled && value.trim().length >= 3 && remaining >= 0;
@@ -22,7 +24,7 @@ export function PromptComposer({ disabled, onSubmit }: PromptComposerProps) {
   const send = (): void => {
     if (!canSend) return;
     onSubmit(value.trim());
-    setValue("");
+    onChange("");
     textareaRef.current?.focus();
   };
 
@@ -38,7 +40,7 @@ export function PromptComposer({ disabled, onSubmit }: PromptComposerProps) {
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
