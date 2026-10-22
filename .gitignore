@@ -33,3 +33,4 @@ data/prompt-registry/
 # ── Working docs (never reach the public repo) ────────────────────────
 PLAN.md
 AGENTS.md
+*.tsbuildinfo

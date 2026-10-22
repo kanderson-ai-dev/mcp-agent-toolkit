@@ -1,0 +1,65 @@
+import { ArrowRight, ShieldCheck, Workflow, Zap } from "lucide-react";
+
+interface EmptyStateProps {
+  examples: string[];
+  onPick: (question: string) => void;
+}
+
+const HIGHLIGHTS = [
+  { Icon: Workflow, text: "Discovers tools live over MCP" },
+  { Icon: ShieldCheck, text: "Guardrails active on every call" },
+  { Icon: Zap, text: "Events streamed in real time" },
+];
+
+/**
+ * Hero empty state — explains the product in user terms and offers the
+ * dataset's example questions as one-click chips.
+ */
+export function EmptyState({ examples, onPick }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center px-2 py-10 text-center sm:py-14">
+      <div className="rounded-2xl bg-gradient-to-b from-indigo-500/20 to-transparent p-[1px]">
+        <div className="rounded-2xl bg-page px-6 py-5">
+          <h2 className="hero-title text-2xl font-bold tracking-tight sm:text-3xl">
+            Ask. Watch the agent work.
+          </h2>
+        </div>
+      </div>
+      <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted">
+        The agent decides which tools it needs — web search, the internal
+        database, or workspace files — invokes them over the MCP protocol, and
+        shows you every step live, with the sources it used.
+      </p>
+
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+        {HIGHLIGHTS.map(({ Icon, text }) => (
+          <span key={text} className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <Icon className="size-3.5 text-accent" />
+            {text}
+          </span>
+        ))}
+      </div>
+
+      {examples.length > 0 && (
+        <div className="mt-8 w-full max-w-2xl">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">
+            Try one of these questions
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {examples.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => onPick(q)}
+                className="group flex items-start justify-between gap-3 rounded-xl bg-raised/70 p-3.5 text-left text-sm leading-snug text-soft ring-1 ring-line transition-all hover:bg-raised hover:text-ink hover:ring-indigo-500/40"
+              >
+                <span className="line-clamp-3">{q}</span>
+                <ArrowRight className="mt-0.5 size-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
