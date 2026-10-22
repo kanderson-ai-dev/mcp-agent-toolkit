@@ -1,0 +1,348 @@
+{
+  "$defs": {
+    "Aggregate": {
+      "properties": {
+        "taskSuccessAvg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tasksuccessavg"
+        },
+        "groundingAvg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Groundingavg"
+        },
+        "toolUsageAvg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Toolusageavg"
+        },
+        "toolUsageAppropriatePct": {
+          "title": "Toolusageappropriatepct",
+          "type": "number"
+        },
+        "adversarialResisted": {
+          "title": "Adversarialresisted",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "failures": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Failures",
+          "type": "array"
+        }
+      },
+      "required": [
+        "taskSuccessAvg",
+        "groundingAvg",
+        "toolUsageAvg",
+        "toolUsageAppropriatePct",
+        "adversarialResisted",
+        "passed"
+      ],
+      "title": "Aggregate",
+      "type": "object"
+    },
+    "CheckResult": {
+      "properties": {
+        "expectedToolsCalled": {
+          "title": "Expectedtoolscalled",
+          "type": "boolean"
+        },
+        "missingTools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missingtools",
+          "type": "array"
+        },
+        "forbiddenSuccesses": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Forbiddensuccesses",
+          "type": "array"
+        },
+        "toolCallCount": {
+          "title": "Toolcallcount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "expectedToolsCalled",
+        "toolCallCount"
+      ],
+      "title": "CheckResult",
+      "type": "object"
+    },
+    "JudgeScores": {
+      "properties": {
+        "taskSuccess": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Tasksuccess",
+          "type": "number"
+        },
+        "grounding": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Grounding",
+          "type": "number"
+        },
+        "toolUsage": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Toolusage",
+          "type": "number"
+        },
+        "adversarialResistance": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adversarialresistance"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "taskSuccess",
+        "grounding",
+        "toolUsage"
+      ],
+      "title": "JudgeScores",
+      "type": "object"
+    },
+    "ScorecardEntry": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "toolCalls": {
+          "items": {
+            "$ref": "#/$defs/ScorecardToolCall"
+          },
+          "title": "Toolcalls",
+          "type": "array"
+        },
+        "iterations": {
+          "title": "Iterations",
+          "type": "integer"
+        },
+        "terminatedBy": {
+          "title": "Terminatedby",
+          "type": "string"
+        },
+        "durationMs": {
+          "title": "Durationms",
+          "type": "integer"
+        },
+        "answerPreview": {
+          "default": "",
+          "title": "Answerpreview",
+          "type": "string"
+        },
+        "checks": {
+          "$ref": "#/$defs/CheckResult"
+        },
+        "judge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JudgeScores"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "judgeError": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judgeerror"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "prompt",
+        "iterations",
+        "terminatedBy",
+        "durationMs",
+        "checks"
+      ],
+      "title": "ScorecardEntry",
+      "type": "object"
+    },
+    "ScorecardToolCall": {
+      "properties": {
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "durationMs": {
+          "title": "Durationms",
+          "type": "integer"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "outputPreview": {
+          "default": "",
+          "title": "Outputpreview",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "ok",
+        "durationMs"
+      ],
+      "title": "ScorecardToolCall",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "version": {
+      "default": "1.1.0",
+      "title": "Version",
+      "type": "string"
+    },
+    "datasetVersion": {
+      "title": "Datasetversion",
+      "type": "string"
+    },
+    "ranAt": {
+      "format": "date-time",
+      "title": "Ranat",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "live",
+        "offline-smoke"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "judgeModel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Judgemodel"
+    },
+    "langsmithExperiment": {
+      "default": false,
+      "title": "Langsmithexperiment",
+      "type": "boolean"
+    },
+    "thresholds": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Thresholds",
+      "type": "object"
+    },
+    "aggregate": {
+      "$ref": "#/$defs/Aggregate"
+    },
+    "prompts": {
+      "additionalProperties": true,
+      "title": "Prompts",
+      "type": "object"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/ScorecardEntry"
+      },
+      "title": "Results",
+      "type": "array"
+    }
+  },
+  "required": [
+    "datasetVersion",
+    "ranAt",
+    "mode",
+    "model",
+    "judgeModel",
+    "aggregate",
+    "results"
+  ],
+  "title": "Scorecard",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

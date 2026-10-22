@@ -26,7 +26,9 @@ test-results/
 .env.*
 !.env.example
 data/*.db*
-data/sandbox/
+data/sandbox/*
+!data/sandbox/.gitkeep
+!data/sandbox/welcome.txt
 data/reports/
 data/prompt-registry/
 
@@ -34,3 +36,4 @@ data/prompt-registry/
 PLAN.md
 AGENTS.md
 *.tsbuildinfo
+evaluation/scorecard.offline.json

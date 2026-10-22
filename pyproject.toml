@@ -12,6 +12,7 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "fastapi>=0.128",
     "httpx>=0.28.1",
+    "langsmith>=0.14.12",
     "lxml>=6.1.3",
     "mcp>=2.3.0",
     "openai>=3.36.1",
@@ -62,7 +63,7 @@ ignore = ["B008"]
 strict = true
 mypy_path = "src"
 explicit_package_bases = true
-packages = ["mcp_toolkit"]
+packages = ["mcp_toolkit", "evaluation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
