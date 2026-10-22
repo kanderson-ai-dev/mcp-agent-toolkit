@@ -1,0 +1,62 @@
+# Offline demo topology: everything runs deterministic with zero secrets
+# (StubLLM + SEARCH_PROVIDER=none). Set real keys to go live.
+
+services:
+  # Standalone MCP server over stdio. stdin stays open so the process
+  # keeps serving; /metrics + /healthz are exposed on METRICS_PORT for
+  # inspection (the MCP transport itself is stdio — nothing is published
+  # on the network for it).
+  server:
+    build: .
+    image: mcp-agent-toolkit:local
+    command: ["python", "-m", "mcp_toolkit.server"]
+    stdin_open: true
+    environment:
+      SEARCH_PROVIDER: none          # tavily | duckduckgo | auto to go live
+      # SEARCH_API_KEY: ""           # Tavily key (optional, paid)
+      SANDBOX_ROOT: /data/sandbox
+      DB_PATH: /data/demo.db
+      LOG_LEVEL: info
+      METRICS_PORT: "9108"
+      # RATE_LIMIT_PER_MINUTE: "60"
+      # MAX_TOOL_OUTPUT_CHARS: "12000"
+      # READ_FILE_MAX_BYTES: "262144"
+      # WRITE_FILE_MAX_BYTES: "1048576"
+    volumes:
+      - toolkit-data:/data
+    ports:
+      - "127.0.0.1:9108:9108"        # /metrics + /healthz only
+    restart: unless-stopped
+
+  # One-shot client demo: spawns its own server over stdio inside the
+  # container (exactly like the local CLI), asks a question through the
+  # deterministic StubLLM, prints the event stream, and exits.
+  #   docker compose run --rm client
+  client:
+    build: .
+    image: mcp-agent-toolkit:local
+    command: ["python", "-m", "scripts.demo"]
+    environment:
+      LLM_PROVIDER: stub             # openai + OPENAI_API_KEY for a live run
+      # OPENAI_API_KEY: ""
+      # CHAT_MODEL_NAME: gpt-4o-mini
+      SEARCH_PROVIDER: none
+      SANDBOX_ROOT: /data/sandbox
+      DB_PATH: /data/demo.db
+      LOG_LEVEL: info
+      OUTPUT_FORMAT: pretty          # json for a machine-readable stream
+      # MAX_TOOL_ITERATIONS: "8"
+    volumes:
+      - toolkit-data:/data
+
+  # ── Reserved for the Phase 8 web console ────────────────────────────
+  # web:
+  #   build: .
+  #   command: ["python", "-m", "mcp_toolkit.web"]
+  #   environment:
+  #     WEB_PORT: "8080"
+  #     WEB_CORS_ORIGIN: "http://localhost:8080"
+  #   ports: ["127.0.0.1:8080:8080"]
+
+volumes:
+  toolkit-data:

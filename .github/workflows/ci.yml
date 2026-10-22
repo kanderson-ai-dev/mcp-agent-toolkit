@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      - name: Lockfile freshness
+        run: uv lock --check
+
       - name: Lint
         run: |
           uv run ruff check .
@@ -32,4 +35,34 @@ jobs:
         run: uv run mypy --strict src
 
       - name: Test (offline, deterministic)
-        run: uv run pytest -q --cov=src --cov-branch --cov-fail-under=90
+        run: >
+          uv run pytest -q --cov=src --cov-branch
+          --cov-report=xml --cov-fail-under=90
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: error
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans history
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Dependency audit
+        run: uv run pip-audit --strict
