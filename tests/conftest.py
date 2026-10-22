@@ -12,6 +12,40 @@ from collections.abc import Iterator
 
 import pytest
 
+ALL_SETTINGS_ENV_VARS = (
+    "OPENAI_API_KEY",
+    "CHAT_MODEL_NAME",
+    "LLM_PROVIDER",
+    "SEARCH_PROVIDER",
+    "SEARCH_API_KEY",
+    "MCP_SERVER_COMMAND",
+    "MCP_SERVER_ARGS",
+    "SANDBOX_ROOT",
+    "DB_PATH",
+    "RATE_LIMIT_PER_MINUTE",
+    "MAX_TOOL_ITERATIONS",
+    "MAX_TOOL_OUTPUT_CHARS",
+    "READ_FILE_MAX_BYTES",
+    "WRITE_FILE_MAX_BYTES",
+    "LOG_LEVEL",
+    "METRICS_PORT",
+    "OUTPUT_FORMAT",
+    "LANGCHAIN_TRACING_V2",
+    "LANGCHAIN_API_KEY",
+    "LANGCHAIN_PROJECT",
+    "WEB_PORT",
+    "WEB_CORS_ORIGIN",
+)
+
+
+@pytest.fixture()
+def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    """Unset every ``Settings`` env var so tests are fully deterministic."""
+    for name in ALL_SETTINGS_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    return monkeypatch
+
+
 SECRET_ENV_VARS = (
     "OPENAI_API_KEY",
     "SEARCH_API_KEY",
