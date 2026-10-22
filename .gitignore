@@ -26,6 +26,8 @@ test-results/
 .env.*
 !.env.example
 data/*.db*
+data/sandbox/
+data/reports/
 data/prompt-registry/
 
 # ── Working docs (never reach the public repo) ────────────────────────

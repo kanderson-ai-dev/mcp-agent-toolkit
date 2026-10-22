@@ -9,6 +9,8 @@ AGENTS.md
 .env.*
 !.env.example
 data/*.db*
+data/sandbox/
+data/reports/
 data/prompt-registry/
 
 # ── Python caches / env ───────────────────────────────────────────────
