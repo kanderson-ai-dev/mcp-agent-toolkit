@@ -134,6 +134,15 @@ Live (needs `OPENAI_API_KEY`):
 uv run python -m evaluation.run_eval
 ```
 
+When `LANGCHAIN_TRACING_V2` + key are set, the same live run lands in
+LangSmith — the committed scorecard above has its experiment mirror:
+
+| Evidence | What it shows |
+|---|---|
+| ![LangSmith experiments](docs/eval/langsmith-experiments.png) | **Experiment history** — repeated live passes over dataset v1.1.0: adversarial resistance 1.00, expected-tools 1.00, grounding 4.2–4.6, latency P50/P99 and token totals per run. |
+| ![Experiment runs](docs/eval/langsmith-experiment-runs.png) | **Per-question judging** — all 14 questions with their category (adversarial, single-tool, multi-tool, error-recovery, ambiguous) and the judge's per-dimension scores. |
+| ![LangSmith trace](docs/eval/langsmith-trace.png) | **Single trace** — an adversarial `DROP TABLE` input through `gpt-4o-mini`: the promoted v3 system prompt on the wire, 609 tokens, clean refusal out. |
+
 ## 🔐 Prompt Registry
 
 Prompts are versioned data, not code-embedded strings:
@@ -358,8 +367,9 @@ Tailwind · Docker (non-root)
   into shared counters (documented non-atomic check→record race — fine for
   a guardrail).
 - Streamable HTTP is loopback + bearer-token, not Internet-hardened.
-- The dataset is 24 questions — a gate, not a benchmark; widening it is the
-  natural next step.
+- The dataset grew to v1.2.0 (24 questions) after the committed scorecard
+  was taken — that artifact covers v1.1.0 (14 questions); a fresh live run
+  is the refresh path. It's a gate, not a benchmark either way.
 - `SEARCH_PROVIDER=duckduckgo` is keyless and can rate-limit under heavy
   use; Tavily is the stable live path.
 
@@ -372,4 +382,4 @@ surfaces; `docs/DECISIONS.md` explains the non-obvious choices.
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE).
+MIT — © 2026 Kaarsten Anderson (<contact@kaarstenanderson.com>). See [LICENSE](LICENSE).

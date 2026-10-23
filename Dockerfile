@@ -25,6 +25,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ── Runtime: slim image, non-root, no build tooling ───────────────────
 FROM python:3.12-slim-bookworm
 
+LABEL org.opencontainers.image.title="mcp-agent-toolkit" \
+      org.opencontainers.image.description="MCP server + agent client + web console: guarded tools over an open protocol" \
+      org.opencontainers.image.authors="Kaarsten Anderson <contact@kaarstenanderson.com>" \
+      org.opencontainers.image.licenses="MIT"
+
 RUN groupadd --system app && useradd --system --gid app --uid 10001 app \
     && mkdir -p /data && chown app:app /data
 

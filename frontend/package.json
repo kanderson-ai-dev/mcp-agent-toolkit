@@ -2,6 +2,7 @@
   "name": "mcp-agent-toolkit-console",
   "private": true,
   "version": "0.1.0",
+  "author": "Kaarsten Anderson <contact@kaarstenanderson.com>",
   "type": "module",
   "license": "MIT",
   "description": "React console for mcp-agent-toolkit — a browser UI over the FastAPI/SSE adapter in src/mcp_toolkit/web/.",

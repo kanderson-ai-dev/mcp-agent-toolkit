@@ -1,5 +1,6 @@
 # Offline demo topology: everything runs deterministic with zero secrets
 # (StubLLM + SEARCH_PROVIDER=none). Set real keys to go live.
+# Author: Kaarsten Anderson <contact@kaarstenanderson.com>
 
 services:
   # Standalone MCP server over stdio. stdin stays open so the process

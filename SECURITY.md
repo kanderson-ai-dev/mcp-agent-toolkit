@@ -2,9 +2,9 @@
 
 ## Reporting
 
-Report vulnerabilities privately to the maintainer (see `pyproject.toml`
-authors). Do not open a public issue for a vulnerability until it has
-been assessed and fixed.
+Report vulnerabilities privately to the maintainer at
+contact@kaarstenanderson.com. Do not open a public issue for a
+vulnerability until it has been assessed and fixed.
 
 ## Threat model & controls
 

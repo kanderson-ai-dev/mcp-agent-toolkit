@@ -36,5 +36,6 @@ data/prompt-registry/
 # ── Working docs (never reach the public repo) ────────────────────────
 PLAN.md
 AGENTS.md
+internal/
 *.tsbuildinfo
 evaluation/scorecard.offline.json
