@@ -48,6 +48,11 @@ class DiscoveredTool:
     name: str
     description: str
     input_schema: dict[str, Any]
+    # MCP ToolAnnotations (readOnlyHint, …) as advertised by the server —
+    # camelCase wire keys, additive/optional for older servers.
+    annotations: dict[str, Any] | None = None
+    # Published outputSchema for structuredContent, when advertised.
+    output_schema: dict[str, Any] | None = None
 
 
 FailureKind = Literal["timeout", "unknown_tool", "malformed", "server_error"]
@@ -121,6 +126,32 @@ class McpAgentClient:
             await client._discover()
             yield client
 
+    @classmethod
+    @asynccontextmanager
+    async def connect_streamable_http(
+        cls,
+        url: str,
+        *,
+        token: str | None = None,
+        call_timeout_s: float = CALL_TIMEOUT_S,
+    ) -> AsyncIterator[McpAgentClient]:
+        """Connect over Streamable HTTP — the opt-in remote transport.
+        ``token`` becomes an ``Authorization: Bearer`` header; the server
+        side decides whether to demand it (always on non-loopback)."""
+        import httpx2
+        from mcp.client.streamable_http import streamable_http_client
+
+        headers = {"Authorization": f"Bearer {token}"} if token else None
+        async with (
+            httpx2.AsyncClient(headers=headers) as http_client,
+            streamable_http_client(url, http_client=http_client) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            client = cls(session, call_timeout_s)
+            await client._discover()
+            yield client
+
     async def _discover(self) -> None:
         listed = await self._session.list_tools()
         self._tools = [
@@ -128,6 +159,12 @@ class McpAgentClient:
                 name=t.name,
                 description=t.description or "",
                 input_schema=dict(t.input_schema) if t.input_schema else {},
+                annotations=(
+                    t.annotations.model_dump(by_alias=True, exclude_none=True)
+                    if t.annotations
+                    else None
+                ),
+                output_schema=dict(t.output_schema) if t.output_schema else None,
             )
             for t in listed.tools
         ]

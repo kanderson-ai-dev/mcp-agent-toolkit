@@ -24,7 +24,13 @@ from mcp_toolkit.web.sse import frame
 from tests.helpers import test_prompt
 
 TOOLS = [
-    DiscoveredTool(name="web_search", description="Search the web", input_schema={}),
+    DiscoveredTool(
+        name="web_search",
+        description="Search the web",
+        input_schema={},
+        annotations={"readOnlyHint": True, "openWorldHint": True},
+        output_schema={"type": "object", "properties": {"status": {"const": "ok"}}},
+    ),
     DiscoveredTool(name="db_query", description="Query reports", input_schema={}),
 ]
 
@@ -103,6 +109,20 @@ class TestEndpoints:
         body = res.json()
         assert body["llm"] == {"provider": "scripted"}
         assert {t["name"] for t in body["tools"]} == {"web_search", "db_query"}
+
+    async def test_tools_surfaces_mcp_metadata(self) -> None:
+        """Annotations + outputSchema are additive fields on /api/tools —
+        absent keys degrade to null for older servers."""
+        async with _client(create_app(_deps(ScriptedLLM([])))) as c:
+            res = await c.get("/api/tools")
+        tools = {t["name"]: t for t in res.json()["tools"]}
+        assert tools["web_search"]["annotations"] == {
+            "readOnlyHint": True,
+            "openWorldHint": True,
+        }
+        assert tools["web_search"]["outputSchema"]["type"] == "object"
+        assert tools["db_query"]["annotations"] is None
+        assert tools["db_query"]["outputSchema"] is None
 
     async def test_post_chat_returns_runid_201(self) -> None:
         async with _client(create_app(_deps(ScriptedLLM([])))) as c:

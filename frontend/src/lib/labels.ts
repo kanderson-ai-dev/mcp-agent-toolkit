@@ -22,6 +22,8 @@ export interface ToolMeta {
   Icon: LucideIcon;
   /** Tailwind classes for the icon tile — one accent per tool. */
   tileClass: string;
+  /** Capability chips mirroring the server's MCP ToolAnnotations. */
+  hints: string[];
 }
 
 const TOOL_META: Record<string, ToolMeta> = {
@@ -29,21 +31,25 @@ const TOOL_META: Record<string, ToolMeta> = {
     label: "Web search",
     Icon: Globe,
     tileClass: "bg-cyan-500/15 text-cyan ring-cyan-500/30",
+    hints: ["Read-only", "Reaches the internet"],
   },
   db_query: {
     label: "Database query",
     Icon: Database,
     tileClass: "bg-violet-500/15 text-violet ring-violet-500/30",
+    hints: ["Read-only"],
   },
   read_file: {
     label: "File read",
     Icon: FileText,
     tileClass: "bg-amber-500/15 text-warn ring-amber-500/30",
+    hints: ["Read-only"],
   },
   write_file: {
     label: "File write",
     Icon: FilePenLine,
     tileClass: "bg-emerald-500/15 text-ok ring-emerald-500/30",
+    hints: ["Writes files", "Overwrites"],
   },
 };
 
@@ -51,6 +57,7 @@ const FALLBACK_META: ToolMeta = {
   label: "",
   Icon: Wrench,
   tileClass: "bg-faint/15 text-muted ring-faint/30",
+  hints: [],
 };
 
 /** `snake_case`/`camelCase` → "Readable words" (fallback only). */
@@ -101,6 +108,8 @@ export function errorCodeLabel(code: string): string {
       return "Not found";
     case "rate_limited":
       return "Rate limit reached";
+    case "too_large":
+      return "Result too large";
     case "upstream":
       return "External service unavailable";
     default:

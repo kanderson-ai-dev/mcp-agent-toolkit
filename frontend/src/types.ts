@@ -100,7 +100,20 @@ export interface RunRecord {
 export type ConsolePhase = "idle" | "streaming" | "done" | "error";
 
 export interface ToolsInfo {
-  tools: { name: string; description: string }[];
+  tools: {
+    name: string;
+    description: string;
+    /** Server-advertised MCP ToolAnnotations (camelCase wire keys). */
+    annotations?: {
+      title?: string;
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    } | null;
+    /** Published outputSchema for structuredContent, when advertised. */
+    outputSchema?: Record<string, unknown> | null;
+  }[];
   llm: { provider: string };
 }
 

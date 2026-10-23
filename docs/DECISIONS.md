@@ -137,3 +137,22 @@ the event loop never blocks on I/O.
 
 - *Phase 3.1 (`mcp` SDK):* pending — will record `isError` production,
   request `_meta` access from a tool handler, and stdout purity.
+
+- *Phase 16 (`mcp` SDK 2.x, structured output):* `Annotated[CallToolResult,
+  X]` publishes `X`'s schema as `outputSchema` **and** validates a manually
+  returned `CallToolResult`'s `structuredContent` against `X` on every
+  non-error call — error results skip validation entirely. Caveat learned
+  by spike: annotating with `X | None` (any union/generic) makes the SDK
+  wrap the schema in `{"result": X}` via a synthesized model instead of
+  publishing `X` directly; the annotation must be the bare model. When a
+  sanitized text envelope is truncated mid-JSON no faithful structure
+  exists — `_result` degrades to a typed `too_large` error arm +
+  `is_error=True` rather than shipping an unvalidatable result.
+
+- *Phase 16 (`mcp` SDK 2.x, transports):* `streamable_http_client` yields
+  a 2-tuple `TransportStreams(read, write)` — no session-id getter — and
+  takes an `httpx2.AsyncClient` (the SDK's pinned HTTP namespace, a
+  transitive dep exposed by its signature). `streamable_http_app(host=…)`
+  only toggles the loopback DNS-rebinding/Host-Origin allowlist; the
+  actual bind is uvicorn's job, so auth is a pure-ASGI middleware
+  (`BearerOnly`, `secrets.compare_digest`) wrapping the Starlette app.

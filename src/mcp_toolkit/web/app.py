@@ -105,7 +105,15 @@ def create_app(
     async def tools(request: Request) -> dict[str, Any]:
         d = _deps(request)
         return {
-            "tools": [{"name": t.name, "description": t.description} for t in d.discovered_tools],
+            "tools": [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "annotations": t.annotations,
+                    "outputSchema": t.output_schema,
+                }
+                for t in d.discovered_tools
+            ],
             "llm": {"provider": d.llm.name},
         }
 

@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     mcp_server_command: str | None = None
     mcp_server_args: str | None = None
 
+    # ── MCP transport (server process) ────────────────────────────────
+    # stdio is canonical; Streamable HTTP is opt-in for remote clients.
+    mcp_transport: Literal["stdio", "streamable-http"] = "stdio"
+    mcp_http_host: str = "127.0.0.1"
+    mcp_http_port: int = Field(default=8000, ge=1, le=65535)
+    mcp_http_token: SecretStr | None = None
+    """Bearer token required by the HTTP transport — optional on loopback,
+    mandatory when binding to a non-loopback host (checked at startup)."""
+
     # ── Server resources ──────────────────────────────────────────────
     sandbox_root: Path = Path("./data/sandbox")
     db_path: Path = Path("./data/demo.db")

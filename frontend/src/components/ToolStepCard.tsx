@@ -52,6 +52,14 @@ export function ToolStepCard({ step }: { step: ToolStep }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <h3 className="text-sm font-semibold text-ink">{meta.label}</h3>
+            {meta.hints.map((hint) => (
+              <span
+                key={hint}
+                className="rounded-full bg-overlay/60 px-2 py-0.5 text-[10px] font-medium text-muted ring-1 ring-line"
+              >
+                {hint}
+              </span>
+            ))}
             <StatusBadge status={step.status} />
             {step.durationMs !== undefined && (
               <span className="text-xs text-muted">

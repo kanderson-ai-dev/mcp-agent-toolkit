@@ -122,6 +122,12 @@ class TestGuardedInvoke:
         assert len(text) < 300
         assert "truncated" in text
         assert "\x00" not in text
+        # Mid-JSON truncation cannot produce a faithful structure: the
+        # result degrades to a typed too_large error arm, loudly.
+        assert res.is_error is True
+        assert res.structured_content is not None
+        assert res.structured_content["status"] == "error"
+        assert res.structured_content["code"] == "too_large"
 
     async def test_request_id_bound_during_call(self) -> None:
         seen: list[str | None] = []

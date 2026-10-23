@@ -30,6 +30,14 @@ Additional notes:
 - **stdio transport** — the server speaks MCP on stdout only; a malformed
   or hostile client cannot reach a network listener. The optional
   `/metrics` exposition binds `127.0.0.1` only.
+- **Streamable HTTP transport (opt-in)** — `MCP_TRANSPORT=streamable-http`
+  exposes the same tools over HTTP for clients that cannot spawn a
+  subprocess. Loopback binds need no token; **any non-loopback bind
+  requires `MCP_HTTP_TOKEN`** and the server refuses to start without one.
+  Tokens are compared in constant time and only ever travel in the
+  `Authorization` header. This transport is a developer surface, not
+  hardened for the open Internet — put it behind TLS and a real
+  identity layer for anything beyond localhost.
 - **Error envelopes, not exceptions** — guardrail rejections return
   `{status:"error",code}` (`invalid_input`, `forbidden`, `not_found`,
   `rate_limited`, `upstream`, `internal`), so the model reacts to a

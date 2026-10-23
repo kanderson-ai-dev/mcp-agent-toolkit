@@ -18,6 +18,7 @@ ToolErrorCode = Literal[
     "forbidden",
     "not_found",
     "rate_limited",
+    "too_large",
     "upstream",
     "internal",
 ]

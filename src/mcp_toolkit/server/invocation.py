@@ -16,6 +16,7 @@ leak through the logs.
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from dataclasses import dataclass
@@ -34,6 +35,7 @@ from mcp_toolkit.result import (
     ErrEnvelope,
     ToolError,
     envelope_json,
+    err,
     error_result,
     ok,
 )
@@ -158,7 +160,33 @@ async def guarded_invoke(
 
 def _result(envelope: Any, deps: InvocationDeps) -> CallToolResult:
     """Serialize the envelope, sanitize the text (untrusted data), and
-    flag errors via ``is_error`` so the model can read and react."""
-    is_error = isinstance(envelope, ErrEnvelope)
+    flag errors via ``is_error`` so the model can read and react.
+
+    ``structuredContent`` is the *same* sanitized envelope parsed back —
+    the text and structured views can never disagree. One exception:
+    when the character cap truncates the text mid-JSON there is no
+    faithful structure to emit, so the result degrades to a typed
+    ``too_large`` error arm (and ``is_error``) — a loud failure beats a
+    corrupt structure, and ``is_error`` also exempts the SDK's
+    output-schema validation, which would reject the error arm."""
     text = sanitize_tool_output(envelope_json(envelope), deps.max_output_chars).text
-    return CallToolResult(content=[TextContent(type="text", text=text)], is_error=is_error)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        truncated = err(
+            "too_large",
+            f"Tool output exceeded the {deps.max_output_chars}-character cap "
+            "and was truncated mid-envelope; retry with a smaller read or query",
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            is_error=True,
+            structured_content=truncated.model_dump(mode="json"),
+        )
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        is_error=isinstance(envelope, ErrEnvelope),
+        structured_content=parsed,
+    )

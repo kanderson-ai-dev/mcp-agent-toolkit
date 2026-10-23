@@ -21,6 +21,35 @@ from scripts.seed_db import seed_demo_db
 
 TOOL_NAMES = {"web_search", "db_query", "read_file", "write_file"}
 
+# The advertised annotation story per tool — these flags are a contract
+# with clients, so they are pinned, not just presence-checked.
+EXPECTED_ANNOTATIONS = {
+    "web_search": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+    "db_query": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "read_file": {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+    "write_file": {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+}
+
 
 @pytest.fixture()
 def work_env(tmp_path: Path) -> dict[str, str]:
@@ -159,3 +188,119 @@ async def test_rate_limit_enforced_over_transport(work_env: dict[str, str]) -> N
         env = _envelope(await session.call_tool("web_search", {"query": "rl"}))
         assert env["code"] == "rate_limited"
         assert "retry after" in env["message"]
+
+
+# ── Annotations, structured output, resources, prompts ─────────────────
+
+
+async def test_annotations_advertised_per_tool(work_env: dict[str, str]) -> None:
+    async with connect(work_env) as session:
+        listed = await session.list_tools()
+        by_name = {t.name: t for t in listed.tools}
+        assert set(by_name) == TOOL_NAMES
+        for name, expected in EXPECTED_ANNOTATIONS.items():
+            annotations = by_name[name].annotations
+            assert annotations is not None, name
+            actual = annotations.model_dump(by_alias=True, exclude_none=True)
+            for key, value in expected.items():
+                assert actual.get(key) == value, f"{name}.{key}"
+            assert by_name[name].title, name  # a human title rides along
+
+
+async def test_output_schemas_advertised(work_env: dict[str, str]) -> None:
+    async with connect(work_env) as session:
+        listed = await session.list_tools()
+        by_name = {t.name: t for t in listed.tools}
+        for name in TOOL_NAMES:
+            schema = by_name[name].output_schema
+            assert schema is not None, name
+            props = schema.get("properties", {})
+            # The success arm of the envelope is published…
+            assert props.get("status", {}).get("const") == "ok", name
+            assert "data" in props, name
+        # …and the shapes are tool-specific, not one generic bag. `data`
+        # is a $ref into $defs — resolve it to compare the fields.
+        search_schema = by_name["web_search"].output_schema
+        search_ref = search_schema["properties"]["data"]["$ref"].split("/")[-1]
+        search_data = search_schema["$defs"][search_ref]
+        assert set(search_data["properties"]) == {"provider", "query", "results"}
+        write_schema = by_name["write_file"].output_schema
+        write_ref = write_schema["properties"]["data"]["$ref"].split("/")[-1]
+        write_data = write_schema["$defs"][write_ref]
+        assert set(write_data["properties"]) == {"path", "bytes_written"}
+
+
+async def test_structured_content_matches_text_envelope(work_env: dict[str, str]) -> None:
+    """structuredContent is literally the sanitized text parsed — the two
+    views can never disagree."""
+    async with connect(work_env) as session:
+        for name, args in (
+            ("web_search", {"query": "mcp", "max_results": 2}),
+            ("db_query", {"query": "SELECT title FROM reports LIMIT 1"}),
+            ("write_file", {"path": "sc.md", "content": "hello"}),
+            ("read_file", {"path": "sc.md"}),
+        ):
+            res = await session.call_tool(name, args)
+            assert res.is_error is False, name
+            assert res.structured_content is not None, name
+            assert res.structured_content == json.loads(res.content[0].text), name
+            assert res.structured_content["status"] == "ok", name
+
+
+async def test_structured_content_on_guardrail_error(work_env: dict[str, str]) -> None:
+    async with connect(work_env) as session:
+        res = await session.call_tool("db_query", {"query": "DROP TABLE reports"})
+        assert res.is_error is True
+        # The error envelope is still emitted structurally — clients can
+        # branch on `status` without parsing text.
+        assert res.structured_content is not None
+        assert res.structured_content["status"] == "error"
+        assert res.structured_content["code"] == "forbidden"
+
+
+async def test_resources_advertised_and_readable(work_env: dict[str, str]) -> None:
+    async with connect(work_env) as session:
+        listed = await session.list_resources()
+        uris = {str(r.uri) for r in listed.resources}
+        assert {"reports://schema", "sandbox://index"} <= uris
+
+        schema = await session.read_resource("reports://schema")
+        assert schema.contents
+        schema_text = schema.contents[0]
+        assert schema_text.mime_type == "text/plain"
+        assert "CREATE TABLE" in schema_text.text.upper()
+
+        write = _envelope(
+            await session.call_tool("write_file", {"path": "idx.txt", "content": "x"})
+        )
+        assert write["status"] == "ok"
+        index = await session.read_resource("sandbox://index")
+        index_text = index.contents[0]
+        assert index_text.mime_type == "text/plain"
+        assert "idx.txt" in index_text.text
+
+
+async def test_prompts_advertised_and_rendered(work_env: dict[str, str]) -> None:
+    async with connect(work_env) as session:
+        listed = await session.list_prompts()
+        prompts = {p.name: p for p in listed.prompts}
+        assert "research_briefing" in prompts
+
+        rendered = await session.get_prompt("research_briefing", {"topic": "MCP Transports"})
+        assert rendered.messages
+        msg = rendered.messages[0]
+        assert msg.role == "user"
+        text = msg.content.text if hasattr(msg.content, "text") else str(msg.content)
+        assert "MCP Transports" in text
+        # The suggested file is slugged — the raw topic never lands in a path.
+        assert "reports/mcp-transports.md" in text
+
+
+async def test_prompt_slug_sanitizes_adversarial_topic(work_env: dict[str, str]) -> None:
+    async with connect(work_env) as session:
+        rendered = await session.get_prompt("research_briefing", {"topic": "../../etc/passwd!!"})
+        text = rendered.messages[0].content.text
+        # The topic may echo verbatim (it is user-supplied data in a user
+        # message) — the *path suggestion* is what must stay inside the sandbox.
+        assert "reports/etc-passwd.md" in text
+        assert "reports/../../" not in text

@@ -14,9 +14,12 @@ const BASE: ToolStep = {
 };
 
 describe("ToolStepCard states", () => {
-  it("running: friendly name, Running badge, no result control", () => {
+  it("running: friendly name, annotation hints, Running badge, no result control", () => {
     render(<ToolStepCard step={BASE} />);
     expect(screen.getByText("Database query")).toBeInTheDocument();
+    // MCP annotation → human chip; the raw hint names never render.
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    expect(screen.queryByText(/readOnlyHint/)).not.toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getByText("Step 2")).toBeInTheDocument();
     expect(
@@ -90,5 +93,20 @@ describe("ToolStepCard states", () => {
     );
     await user.click(screen.getByRole("button", { name: /result/i }));
     expect(screen.getByText("Q3 report")).toBeInTheDocument();
+  });
+
+  it("shows each tool's hint vocabulary, not raw annotation keys", () => {
+    const { unmount } = render(
+      <ToolStepCard step={{ ...BASE, tool: "web_search" }} />,
+    );
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    expect(screen.getByText("Reaches the internet")).toBeInTheDocument();
+    unmount();
+
+    render(<ToolStepCard step={{ ...BASE, tool: "write_file" }} />);
+    expect(screen.getByText("Writes files")).toBeInTheDocument();
+    expect(screen.getByText("Overwrites")).toBeInTheDocument();
+    // Write tools are not read-only — no stale chip.
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
   });
 });

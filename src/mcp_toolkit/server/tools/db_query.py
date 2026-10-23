@@ -30,7 +30,7 @@ DESCRIPTION = (
 )
 
 
-def _open_readonly(db_path: str) -> sqlite3.Connection:
+def open_readonly(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
@@ -45,7 +45,7 @@ def _rows_to_json(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
 
 
 def create_db_query_tool(
-    db_path: str, connect: Callable[[str], sqlite3.Connection] = _open_readonly
+    db_path: str, connect: Callable[[str], sqlite3.Connection] = open_readonly
 ) -> ToolDef:
     connection: sqlite3.Connection | None = None
 

@@ -45,7 +45,7 @@ flowchart LR
 
 | Surface | Module | Responsibility | Trust boundary |
 |---|---|---|---|
-| MCP transport | `server/app.py`, `server/__main__.py` | stdio server, tool registration | stdout = protocol frames only; logs → stderr |
+| MCP transport | `server/app.py`, `server/__main__.py`, `server/streamable.py` | stdio server (canonical), opt-in Streamable HTTP | stdout = protocol frames only; logs → stderr; HTTP is loopback+token-gated |
 | Invocation pipeline | `server/invocation.py` | rate limit → handler → envelope → sanitize → log + metrics | every call, no exceptions across the wire |
 | Tools | `server/tools/` | `web_search`, `db_query`, `read_file`, `write_file` | tool output is untrusted data (LLM01) |
 | Guardrails | `server/guardrails/` | path sandbox, read-only SQL, sanitize, rate limit | reject → typed error envelope, counted |
@@ -82,3 +82,16 @@ reported when the model has a price (committed table in
 never estimated as $0. Scorecards and A/B evidence roll these up as
 `avgTotalTokens`/`avgCostUsd`/`avgDurationMs` — informational deltas
 that never gate promotion.
+
+**MCP surface beyond `tools/call`:** every tool publishes
+`ToolAnnotations` (read-only, destructive, idempotent, open-world) and a
+tool-specific `outputSchema`; results carry the sanitized envelope both
+as JSON text (back-compat) and as validated `structuredContent`. Two
+read-only resources expose server state (`reports://schema`,
+`sandbox://index`) and one prompt (`research_briefing`) composes the
+tools into a cited-briefing user message — its `topic` argument lands in
+a user message only, and the suggested filename is slugged so an
+adversarial topic cannot smuggle a path. `tools/list` metadata flows
+through `McpAgentClient.DiscoveredTool` into `GET /api/tools`, where the
+console renders annotations as human chips via `lib/labels.ts` (raw hint
+keys never render).

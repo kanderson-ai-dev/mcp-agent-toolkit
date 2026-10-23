@@ -46,6 +46,20 @@ describe("toolMeta", () => {
     );
     expect(toolMeta("").label).toBe("Tool");
   });
+
+  it("maps every tool's MCP annotations to human hint chips", () => {
+    const hints: Record<string, string[]> = {
+      web_search: ["Read-only", "Reaches the internet"],
+      db_query: ["Read-only"],
+      read_file: ["Read-only"],
+      write_file: ["Writes files", "Overwrites"],
+    };
+    for (const [name, expected] of Object.entries(hints)) {
+      expect(toolMeta(name).hints).toEqual(expected);
+    }
+    // Unknown tools get no chips — never a fabricated capability claim.
+    expect(toolMeta("custom_lookup").hints).toEqual([]);
+  });
 });
 
 describe("STATUS_LABEL", () => {
