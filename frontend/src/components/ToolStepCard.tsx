@@ -87,7 +87,7 @@ export function ToolStepCard({ step }: { step: ToolStep }) {
                 type="button"
                 onClick={() => setResultOpen((v) => !v)}
                 aria-expanded={resultOpen}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-soft"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-soft max-sm:min-h-11"
               >
                 Result{!resultOpen && resultSummary(step) && `: ${resultSummary(step)}`}
                 <ChevronDown
@@ -110,7 +110,7 @@ export function ToolStepCard({ step }: { step: ToolStep }) {
               onClick={() => void copyTrace()}
               title="Copy full trace ID"
               aria-label="Copy full trace ID"
-              className="rounded p-0.5 text-muted transition-colors hover:bg-overlay hover:text-soft"
+              className="inline-flex items-center justify-center rounded p-0.5 text-muted transition-colors hover:bg-overlay hover:text-soft max-sm:size-11"
             >
               {copied ? <Check className="size-3.5 text-ok" /> : <Copy className="size-3.5" />}
             </button>

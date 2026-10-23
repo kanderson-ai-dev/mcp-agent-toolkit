@@ -50,12 +50,18 @@ export function FinalAnswerCard({
         </div>
       )}
 
+      {final.toolCalls === 0 && (
+        <p className="mt-2 text-xs italic text-accent/60">
+          Answered without tools
+        </p>
+      )}
+
       <div className="markdown mt-3">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             a: ({ href, children }) => (
-              <a href={href} target="_blank" rel="noreferrer">
+              <a href={href} target="_blank" rel="noopener noreferrer">
                 {children}
               </a>
             ),

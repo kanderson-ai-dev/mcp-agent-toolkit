@@ -71,9 +71,22 @@ export default function App() {
       .catch(() => setApiDown(true));
   }, []);
 
-  // Follow the stream as events arrive — smooth, no layout jumps.
+  // Follow the stream only while the reader sits near the bottom —
+  // scrolling up detaches; submitting a new question re-engages.
+  const followRef = useRef(true);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const onScroll = () => {
+      const gap =
+        document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+      followRef.current = gap < 96;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  useEffect(() => {
+    if (followRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   }, [runs]);
 
   useEffect(() => () => cancelRef.current?.(), []);
@@ -88,6 +101,7 @@ export default function App() {
     (question: string) => {
       if (phase === "streaming") return;
       const started = performance.now();
+      followRef.current = true;
       setPhase("streaming");
       setAnnouncement("Run started");
       setRuns((prev) => [
@@ -160,8 +174,6 @@ export default function App() {
     [phase, patchLiveRun],
   );
 
-  const liveIndex = phase === "streaming" ? runs.length - 1 : -1;
-
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Screen-reader announcements: run start, each tool result, completion. */}
@@ -186,7 +198,7 @@ export default function App() {
               type="button"
               onClick={() => setTab(id)}
               aria-current={tab === id ? "page" : undefined}
-              className={`relative px-3 py-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+              className={`relative flex items-center px-3 py-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent max-sm:min-h-11 ${
                 tab === id ? "text-ink" : "text-muted hover:text-soft"
               }`}
             >
@@ -218,7 +230,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="mt-3 rounded-lg bg-danger/15 px-4 py-2 text-xs font-medium text-danger ring-1 ring-danger/30 transition-colors hover:bg-danger/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
+              className="mt-3 inline-flex items-center rounded-lg bg-danger/15 px-4 py-2 text-xs font-medium text-danger ring-1 ring-danger/30 transition-colors hover:bg-danger/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger max-sm:min-h-11"
             >
               Try again
             </button>
@@ -227,8 +239,15 @@ export default function App() {
           <EmptyState examples={EXAMPLES} onPick={setDraft} />
         ) : (
           <div className="space-y-8">
-            {runs.map((run, i) => (
-              <RunView key={run.id} run={run} live={i === liveIndex} />
+            {runs.map((run) => (
+              <RunView
+                key={run.id}
+                run={run}
+                onRetry={
+                  run.errorMessage ? () => handleSubmit(run.question) : undefined
+                }
+                retryDisabled={phase === "streaming"}
+              />
             ))}
           </div>
         )}
@@ -238,6 +257,7 @@ export default function App() {
       {tab === "console" && (
         <PromptComposer
           disabled={phase === "streaming" || apiDown}
+          busy={phase === "streaming"}
           value={draft}
           onChange={setDraft}
           onSubmit={handleSubmit}

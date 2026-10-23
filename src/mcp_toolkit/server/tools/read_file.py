@@ -51,7 +51,8 @@ def create_read_file_tool(sandbox_root: str | Path, max_bytes: int) -> ToolDef:
             )
         content = await asyncio.to_thread(_read, canonical)
         return {
-            "path": str(os.path.relpath(canonical, root)),  # noqa: ASYNC240
+            # Sandbox-relative path — always POSIX separators (virtual path).
+            "path": Path(os.path.relpath(canonical, root)).as_posix(),  # noqa: ASYNC240
             "bytes": stat.st_size,
             "content": content,
         }

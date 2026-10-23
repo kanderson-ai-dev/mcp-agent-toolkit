@@ -44,7 +44,9 @@ def create_write_file_tool(sandbox_root: str | Path, max_bytes: int) -> ToolDef:
         canonical = realpath_in_sandbox(root, resolved)
         await asyncio.to_thread(_write, canonical, content)
         return {
-            "path": str(os.path.relpath(canonical, root)),  # noqa: ASYNC240
+            # Sandbox-relative path — always POSIX separators (the path is
+            # virtual, not an OS path: `a/b.md` reads the same on Windows).
+            "path": Path(os.path.relpath(canonical, root)).as_posix(),  # noqa: ASYNC240
             "bytes_written": n_bytes,
         }
 

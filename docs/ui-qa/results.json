@@ -1,0 +1,157 @@
+{
+  "q01-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0024,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q01-tablet": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0039,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q01-phone": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0088,
+    "contrastFailures": [],
+    "tapTargetsBelow44px": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q02-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0025,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q03-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0024,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q04-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0024,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q05-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0024,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q06-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0025,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q06-tablet": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0041,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q06-phone": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0087,
+    "contrastFailures": [],
+    "tapTargetsBelow44px": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q07-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0025,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q08-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0024,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q09-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0024,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q09-tablet": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0039,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q09-phone": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0085,
+    "contrastFailures": [],
+    "tapTargetsBelow44px": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "q10-desktop": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0024,
+    "contrastFailures": [],
+    "ok": true,
+    "apiChatRequests": 1,
+    "sseStreams": 1
+  },
+  "state-empty": {
+    "horizontalOverflowPx": 0,
+    "cls": 0,
+    "contrastFailures": [],
+    "ok": true
+  },
+  "state-empty-light": {
+    "horizontalOverflowPx": 0,
+    "cls": 0,
+    "contrastFailures": [],
+    "ok": true
+  },
+  "state-result": {
+    "horizontalOverflowPx": 0,
+    "cls": 0,
+    "contrastFailures": [],
+    "ok": true
+  },
+  "state-error": {
+    "horizontalOverflowPx": 0,
+    "cls": 0,
+    "contrastFailures": [],
+    "ok": true
+  }
+}

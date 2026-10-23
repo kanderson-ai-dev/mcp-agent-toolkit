@@ -7,7 +7,15 @@ import { ToolStepCard } from "./ToolStepCard";
  * One console run: the user's question, the live timeline of steps
  * (tool cards + assistant notes), then the final answer or the error.
  */
-export function RunView({ run, live }: { run: RunRecord; live: boolean }) {
+export function RunView({
+  run,
+  onRetry,
+  retryDisabled,
+}: {
+  run: RunRecord;
+  onRetry?: () => void;
+  retryDisabled?: boolean;
+}) {
   return (
     <section className="space-y-3">
       <div className="flex items-start gap-3">
@@ -33,18 +41,6 @@ export function RunView({ run, live }: { run: RunRecord; live: boolean }) {
           ),
         )}
 
-        {live && !run.final && !run.errorMessage && (
-          <div className="flex items-center gap-2.5 rounded-xl bg-raised/50 px-4 py-3 ring-1 ring-line/70">
-            <span className="relative flex size-2.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-indigo-400 opacity-60" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-indigo-400" />
-            </span>
-            <p className="text-xs font-medium text-soft">
-              The agent is working…
-            </p>
-          </div>
-        )}
-
         {run.errorMessage && (
           <div className="animate-fade-up flex items-start gap-2.5 rounded-xl bg-rose-500/10 p-4 ring-1 ring-rose-500/30">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
@@ -55,6 +51,16 @@ export function RunView({ run, live }: { run: RunRecord; live: boolean }) {
               <p className="mt-1 text-xs leading-relaxed text-danger/80">
                 {run.errorMessage}
               </p>
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  disabled={retryDisabled}
+                  className="mt-2 inline-flex items-center rounded-lg bg-danger/15 px-3 py-1.5 text-xs font-medium text-danger ring-1 ring-danger/30 transition-colors hover:bg-danger/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-11"
+                >
+                  Try again
+                </button>
+              )}
             </div>
           </div>
         )}

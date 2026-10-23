@@ -92,6 +92,6 @@ describe("FinalAnswerCard", () => {
     );
     const link = screen.getByRole("link", { name: "source" });
     expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noreferrer");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 });

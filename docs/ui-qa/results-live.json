@@ -1,0 +1,33 @@
+{
+  "q01-live": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.001,
+    "contrastFailures": [],
+    "ok": true,
+    "badges": [
+      "Success",
+      "Success",
+      "Success"
+    ],
+    "forbidden": []
+  },
+  "q04-live": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0011,
+    "contrastFailures": [],
+    "ok": true,
+    "badges": [
+      "Success",
+      "Success"
+    ],
+    "forbidden": []
+  },
+  "q08-live": {
+    "horizontalOverflowPx": 0,
+    "cls": 0.0011,
+    "contrastFailures": [],
+    "ok": true,
+    "badges": [],
+    "forbidden": []
+  }
+}

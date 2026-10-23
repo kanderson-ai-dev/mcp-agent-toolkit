@@ -129,6 +129,23 @@ export const TELEMETRY_LABEL = {
   cost: "Estimated cost",
 } as const;
 
+/** DB column names → human headers ("published_at" → "Published at").
+ * Unknown camelCase columns get the same treatment so raw identifiers
+ * never render as visible text. */
+export function columnLabel(column: string): string {
+  const words = column
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return "Column";
+  const known: Record<string, string> = { id: "ID", url: "URL", sql: "SQL" };
+  return words
+    .map((w) => known[w.toLowerCase()] ?? w[0]!.toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 /** `requestId` → abbreviated trace label (copy button shows the full id). */
 export function traceLabel(requestId: string): string {
   return requestId.slice(0, 8);
@@ -152,9 +169,9 @@ export function argsSummary(toolName: string, args: Record<string, unknown>): st
     case "db_query":
       return str(args.query);
     case "read_file":
-      return str(args.path);
+      return pathSummary(str(args.path));
     case "write_file": {
-      const p = str(args.path);
+      const p = pathSummary(str(args.path));
       const content = str(args.content);
       return content
         ? `${p} · ${(new TextEncoder().encode(content).length / 1024).toFixed(1)} KB of content`
@@ -259,6 +276,18 @@ export function auditEventLabel(event: string): string {
 /** Whether an argument summary renders as inline code (SQL, paths). */
 export function argsAreCode(toolName: string): boolean {
   return toolName === "db_query" || toolName === "read_file" || toolName === "write_file";
+}
+
+/** Paths that escape the workspace (absolute drive/UNC/root, `..`
+ * segments) render as a fixed phrase — the machine path stays in the
+ * collapsed raw JSON, never as visible UI text. */
+const OUTSIDE_PATH = /^([a-zA-Z]:[\\/]|\\\\|\/)/;
+export function pathSummary(path: string): string {
+  if (!path) return path;
+  if (OUTSIDE_PATH.test(path) || path.split(/[\\/]/).includes("..")) {
+    return "a path outside the workspace";
+  }
+  return path;
 }
 
 interface ResultLikeStep {

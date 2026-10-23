@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, ExternalLink, ShieldAlert } from "lucide-react";
 import clsx from "clsx";
-import { humanizeBytes } from "../lib/format";
-import { errorCodeLabel, providerLabel } from "../lib/labels";
+import { humanizeBytes, humanizeDate } from "../lib/format";
+import { columnLabel, errorCodeLabel, providerLabel } from "../lib/labels";
 import type { ToolStep } from "../types";
 
 interface ResultPanelProps {
@@ -82,6 +82,11 @@ function WebSearchResult({ data }: { data: Record<string, unknown> }) {
         {" · "}
         {hits.length} {hits.length === 1 ? "result" : "results"}
       </p>
+      {hits.length === 0 && (
+        <p className="mt-2 rounded-lg bg-page/60 p-3 text-xs text-muted ring-1 ring-line">
+          No results for this query — try rephrasing or a different source.
+        </p>
+      )}
       <ul className="mt-2 space-y-2">
         {hits.map((hit, i) => {
           const url = text(hit.url);
@@ -93,7 +98,7 @@ function WebSearchResult({ data }: { data: Record<string, unknown> }) {
               <a
                 href={url || undefined}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="group inline-flex items-center gap-1.5 text-sm font-medium text-cyan hover:text-cyan"
               >
                 <span className="line-clamp-1">{text(hit.title) || url}</span>
@@ -143,7 +148,7 @@ function DbQueryResult({ data }: { data: Record<string, unknown> }) {
                     key={col}
                     className="whitespace-nowrap px-3 py-2 font-semibold text-soft"
                   >
-                    {col}
+                    {columnLabel(col)}
                   </th>
                 ))}
               </tr>
@@ -170,7 +175,7 @@ function DbQueryResult({ data }: { data: Record<string, unknown> }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-soft"
+          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-soft max-sm:min-h-11"
         >
           {expanded ? "Show less" : `Show all ${rows.length} rows`}
           <ChevronDown className={clsx("size-3.5 transition-transform", expanded && "rotate-180")} />
@@ -180,9 +185,11 @@ function DbQueryResult({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 function formatCell(v: unknown): string {
   if (v === null || v === undefined) return "—";
-  if (typeof v === "string") return v;
+  if (typeof v === "string") return ISO_DATE.test(v) ? humanizeDate(v) : v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   return JSON.stringify(v);
 }
@@ -203,7 +210,11 @@ function ReadFileResult({ data }: { data: Record<string, unknown> }) {
         {clipped ? `${content.slice(0, CONTENT_PREVIEW_CHARS)}…` : content}
       </pre>
       {clipped && (
-        <p className="mt-1 text-xs text-muted">Content preview</p>
+        <p className="mt-1 text-xs text-muted">
+          Preview — the file continues for{" "}
+          {(content.length - CONTENT_PREVIEW_CHARS).toLocaleString("en-US")} more
+          characters
+        </p>
       )}
     </div>
   );

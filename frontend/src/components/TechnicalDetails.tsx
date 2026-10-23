@@ -29,7 +29,7 @@ export function TechnicalDetails({ payload }: { payload: unknown }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-soft"
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-soft max-sm:min-h-11"
       >
         <Braces className="size-3.5" />
         View raw JSON
@@ -47,7 +47,7 @@ export function TechnicalDetails({ payload }: { payload: unknown }) {
             onClick={() => void copy()}
             title="Copy JSON"
             aria-label="Copy JSON"
-            className="absolute right-2 top-2 rounded-md bg-overlay p-1.5 text-muted ring-1 ring-line transition-colors hover:text-soft"
+            className="absolute right-2 top-2 flex items-center justify-center rounded-md bg-overlay p-1.5 text-muted ring-1 ring-line transition-colors hover:text-soft max-sm:size-11"
           >
             {copied ? (
               <Check className="size-3.5 text-ok" />

@@ -285,6 +285,14 @@ class StubLLM:
                 if calls:
                     return _resp(messages, None, calls)
                 if _WRITE.search(question) and has("write_file"):
+                    requested = next(
+                        (
+                            t.strip()
+                            for t in _BACKTICK.findall(question)
+                            if "/" in t and re.fullmatch(r"[\w./-]+\.[a-z0-9]+", t.strip())
+                        ),
+                        "notes/stub-note.md",
+                    )
                     return _resp(
                         messages,
                         None,
@@ -292,7 +300,7 @@ class StubLLM:
                             _call(
                                 "write_file",
                                 {
-                                    "path": "notes/stub-note.md",
+                                    "path": requested,
                                     "content": f"Stub note for: {question[:160]}",
                                 },
                             )
@@ -326,6 +334,18 @@ class StubLLM:
             and has("write_file")
             and not _already_wrote(messages)
         ):
+            # Honor a backticked target path when the question names one
+            # (`reports/security-briefing.md`), else the stub's default.
+            # A directory separator is required so a read-target filename
+            # like `welcome.txt` is never mistaken for the write target.
+            requested = next(
+                (
+                    t.strip()
+                    for t in _BACKTICK.findall(question)
+                    if "/" in t and re.fullmatch(r"[\w./-]+\.[a-z0-9]+", t.strip())
+                ),
+                "reports/research-summary.md",
+            )
             return _resp(
                 messages,
                 None,
@@ -333,7 +353,7 @@ class StubLLM:
                     _call(
                         "write_file",
                         {
-                            "path": "reports/research-summary.md",
+                            "path": requested,
                             "content": _build_stub_report(messages),
                         },
                     )
