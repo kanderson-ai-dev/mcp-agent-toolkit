@@ -44,7 +44,9 @@ def build_app(settings: Settings) -> FastAPI:
         log = get_logger("mcp_toolkit.web")
         async with McpAgentClient.connect_stdio(spawn.command, spawn.args, env=server_env()) as mcp:
             llm = create_llm(settings)
-            registry = PromptRegistry(settings.prompt_registry_dir)
+            registry = PromptRegistry(
+                settings.prompt_registry_dir, audit_path=settings.prompt_audit_path
+            )
             # Registry resolution happens inside the lifespan — an invalid
             # registry or unknown version aborts startup (fail fast).
             agent_prompt = load_prompt(
@@ -95,6 +97,7 @@ def build_app(settings: Settings) -> FastAPI:
                     admin_enabled=settings.enable_prompt_admin,
                     ab_manager=AbRunManager(),
                     make_ab_runner=make_ab_runner,
+                    ab_results_dir=settings.prompt_ab_results_dir,
                 ),
                 metrics=metrics,
                 cors_origin=settings.web_cors_origin or None,

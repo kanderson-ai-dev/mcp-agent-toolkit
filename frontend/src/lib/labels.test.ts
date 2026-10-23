@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   STATUS_LABEL,
+  abProgressLabel,
   argsAreCode,
   argsSummary,
+  auditEventLabel,
   errorCodeLabel,
+  metricLabel,
+  promptNameLabel,
+  promptStatusLabel,
   providerLabel,
+  regressionLabel,
   resultSummary,
   stepLabel,
   toolMeta,
@@ -150,6 +156,53 @@ describe("resultSummary", () => {
     expect(
       resultSummary({ tool: "db_query", status: "error" }),
     ).toBe("Failed");
+  });
+});
+
+describe("registry labels", () => {
+  it("maps prompt names to friendly titles — never raw ids", () => {
+    expect(promptNameLabel("agent_system")).toBe("Agent system prompt");
+    expect(promptNameLabel("judge_rubric")).toBe("Judge rubric");
+    expect(promptNameLabel("new_prompt")).toBe("New prompt");
+  });
+
+  it("maps lifecycle statuses to badge copy", () => {
+    expect(promptStatusLabel("draft")).toBe("Draft");
+    expect(promptStatusLabel("candidate")).toBe("Candidate");
+    expect(promptStatusLabel("promoted")).toBe("Active");
+    expect(promptStatusLabel("rolled_back")).toBe("Rolled back");
+  });
+
+  it("maps A/B metric ids to readable names", () => {
+    expect(metricLabel("taskSuccess")).toBe("Task success");
+    expect(metricLabel("grounding")).toBe("Grounding");
+    expect(metricLabel("toolUsage")).toBe("Tool use");
+    expect(metricLabel("toolUsageAppropriatePct")).toBe("Appropriate tool use");
+    expect(metricLabel("adversarialResisted")).toBe("Adversarial resistance");
+  });
+
+  it("maps audit event types to timeline copy", () => {
+    expect(auditEventLabel("candidate_created")).toBe("Candidate created");
+    expect(auditEventLabel("ab_test")).toBe("A/B test run");
+    expect(auditEventLabel("promoted")).toBe("Promoted");
+    expect(auditEventLabel("promoted_override")).toBe("Promoted with override");
+    expect(auditEventLabel("rolled_back")).toBe("Rolled back");
+  });
+
+  it("rewrites the leading metric id in server regression strings", () => {
+    expect(
+      regressionLabel("taskSuccess: 4.50 → 4.20 (regression +0.30)"),
+    ).toBe("Task success: 4.50 → 4.20 (regression +0.30)");
+    expect(regressionLabel("some other text")).toBe("some other text");
+  });
+
+  it("humanizes name@vN in progress lines", () => {
+    expect(abProgressLabel("  st-01 (agent_system@v2)")).toBe(
+      "  st-01 (Agent system prompt v2)",
+    );
+    expect(abProgressLabel("baseline v1: 14 questions")).toBe(
+      "baseline v1: 14 questions",
+    );
   });
 });
 

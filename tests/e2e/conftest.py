@@ -8,6 +8,7 @@ teardown kills the process tree.
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -65,13 +66,7 @@ def _wait_ready(
     raise TimeoutError(f"web server on :{port} did not become ready in {timeout_s}s")
 
 
-@pytest.fixture(scope="session")
-def console_url() -> Iterator[str]:
-    """Boot ``mcp-toolkit-web`` with the production build + offline stack.
-
-    Server output goes to a log file, not a pipe — the process logs every
-    tool invocation to stderr and an undrained pipe buffer would deadlock
-    the event loop mid-suite."""
+def _ensure_build() -> None:
     if not (FRONTEND / "dist" / "index.html").exists():
         subprocess.run(
             ["npm", "run", "build"],
@@ -79,8 +74,17 @@ def console_url() -> Iterator[str]:
             check=True,
             timeout=300,
         )
+
+
+def _boot_server(log_name: str, extra_env: dict[str, str]) -> Iterator[str]:
+    """Boot ``mcp-toolkit-web`` with the production build + offline stack.
+
+    Server output goes to a log file, not a pipe — the process logs every
+    tool invocation to stderr and an undrained pipe buffer would deadlock
+    the event loop mid-suite."""
+    _ensure_build()
     port = _free_port()
-    log_path = VIDEO_DIR.parent / "console-server.log"
+    log_path = VIDEO_DIR.parent / log_name
     log_path.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env.update(
@@ -92,6 +96,7 @@ def console_url() -> Iterator[str]:
             "LANGCHAIN_TRACING_V2": "false",
         }
     )
+    env.update(extra_env)
     with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
         proc = subprocess.Popen(
             [sys.executable, "-m", "mcp_toolkit.web"],
@@ -108,6 +113,30 @@ def console_url() -> Iterator[str]:
             yield f"http://127.0.0.1:{port}"
         finally:
             _kill_tree(proc)
+
+
+@pytest.fixture(scope="session")
+def console_url() -> Iterator[str]:
+    """The standard console server — offline stack, admin mutations off."""
+    yield from _boot_server("console-server.log", {})
+
+
+@pytest.fixture(scope="session")
+def admin_console_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    """Admin-enabled server over an isolated registry copy — mutations
+    (candidates, A/B runs, promote, rollback) must never touch the real
+    ``prompts/`` tree or the real audit log."""
+    tmp = tmp_path_factory.mktemp("registry-e2e")
+    shutil.copytree(ROOT / "prompts", tmp / "prompts")
+    yield from _boot_server(
+        "console-server-admin.log",
+        {
+            "ENABLE_PROMPT_ADMIN": "1",
+            "PROMPT_REGISTRY_DIR": str(tmp / "prompts"),
+            "PROMPT_AUDIT_PATH": str(tmp / "audit.jsonl"),
+            "PROMPT_AB_RESULTS_DIR": str(tmp / "ab"),
+        },
+    )
 
 
 @pytest.fixture(scope="session")

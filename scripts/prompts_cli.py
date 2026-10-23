@@ -45,7 +45,7 @@ from mcp_toolkit.web.ab_runs import latest_ab_result, save_ab_result  # noqa: E4
 
 
 def _registry(settings: Settings) -> PromptRegistry:
-    return PromptRegistry(settings.prompt_registry_dir)
+    return PromptRegistry(settings.prompt_registry_dir, audit_path=settings.prompt_audit_path)
 
 
 def _loaded(artifact: PromptArtifact) -> LoadedPrompt:
@@ -212,7 +212,7 @@ def cmd_ab(reg: PromptRegistry, args: argparse.Namespace) -> int:
             args.name, _loaded(baseline_art), _loaded(candidate_art), args.settings, args.offline
         )
     )
-    path = save_ab_result(result)
+    path = save_ab_result(result, out_dir=args.settings.prompt_ab_results_dir)
     reg.audit_log.append(
         {
             "type": "ab_test",
@@ -261,7 +261,12 @@ def cmd_promote(reg: PromptRegistry, args: argparse.Namespace) -> int:
         )
         _print_artifact(updated)
         return 0
-    evidence = latest_ab_result(args.name, args.version)
+    settings = getattr(args, "settings", None)
+    evidence = latest_ab_result(
+        args.name,
+        args.version,
+        out_dir=settings.prompt_ab_results_dir if settings is not None else None,
+    )
     if evidence is None:
         print(
             f"no completed A/B evidence for {args.name}@v{args.version} — run "

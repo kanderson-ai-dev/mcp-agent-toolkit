@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "./components/EmptyState";
 import { Header } from "./components/Header";
 import { PromptComposer } from "./components/PromptComposer";
+import { RegistryView } from "./components/registry/RegistryView";
 import { RunView } from "./components/RunView";
 import { ApiError, fetchTools, submitQuestion } from "./lib/api";
 import { toolMeta } from "./lib/labels";
@@ -59,6 +60,7 @@ export default function App() {
   const [phase, setPhase] = useState<ConsolePhase>("idle");
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [announcement, setAnnouncement] = useState("");
+  const [tab, setTab] = useState<"console" | "registry">("console");
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
@@ -119,6 +121,7 @@ export default function App() {
                   iterations: event.iterations,
                   toolCalls: event.toolCalls,
                   terminatedBy: event.terminatedBy,
+                  promptVersion: event.promptVersion,
                 },
                 elapsedMs: Math.round(performance.now() - started),
               }));
@@ -164,8 +167,42 @@ export default function App() {
       </div>
       <Header toolsInfo={toolsInfo} connected={!apiDown} />
 
+      <nav
+        aria-label="Views"
+        className="border-b border-line/60 bg-page/60"
+      >
+        <div className="mx-auto flex max-w-4xl gap-1 px-4 sm:px-6">
+          {(
+            [
+              ["console", "Console"],
+              ["registry", "Prompt Registry"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              aria-current={tab === id ? "page" : undefined}
+              className={`relative px-3 py-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+                tab === id ? "text-ink" : "text-muted hover:text-soft"
+              }`}
+            >
+              {label}
+              {tab === id && (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent"
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-6 pt-6 sm:px-6">
-        {apiDown && runs.length === 0 ? (
+        {tab === "registry" ? (
+          <RegistryView />
+        ) : apiDown && runs.length === 0 ? (
           <div className="mt-10 rounded-xl bg-rose-500/10 p-5 text-center ring-1 ring-rose-500/30">
             <p className="text-sm font-semibold text-danger">
               Can't reach the agent.
@@ -195,12 +232,14 @@ export default function App() {
         <div ref={bottomRef} />
       </main>
 
-      <PromptComposer
-        disabled={phase === "streaming" || apiDown}
-        value={draft}
-        onChange={setDraft}
-        onSubmit={handleSubmit}
-      />
+      {tab === "console" && (
+        <PromptComposer
+          disabled={phase === "streaming" || apiDown}
+          value={draft}
+          onChange={setDraft}
+          onSubmit={handleSubmit}
+        />
+      )}
     </div>
   );
 }

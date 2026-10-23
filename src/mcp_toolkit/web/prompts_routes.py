@@ -177,7 +177,9 @@ def create_prompt_router(
         out: dict[str, list[dict[str, Any]]] = {}
         for a in registry.list():
             out.setdefault(a.name, []).append(_artifact_json(a))
-        return {"prompts": out}
+        # The console needs this to render its read-only state —
+        # enforcement stays server-side on every mutation route.
+        return {"prompts": out, "adminEnabled": _deps().admin_enabled}
 
     @router.get("/audit")
     async def audit() -> Any:
@@ -263,6 +265,17 @@ def create_prompt_router(
         except UnknownPromptVersion as exc:
             return _err(404, "not_found", str(exc))
         return {"name": name, "from": from_, "to": to, "diff": text}
+
+    @router.get("/{name}/ab-result")
+    async def ab_result(name: str, candidate: int = Query(default=0)) -> Any:
+        """Newest persisted A/B result for ``name@v{candidate}`` — what a
+        promote call would use as evidence."""
+        if candidate < 1:
+            return _err(400, "invalid_input", "ab-result requires ?candidate=<v>")
+        evidence = latest_ab_result(name, candidate, _deps().ab_results_dir)
+        if evidence is None:
+            return _err(404, "not_found", f"no A/B result for {name}@v{candidate}")
+        return evidence
 
     @router.get("/{name}/{version}")
     async def show_version(name: str, version: int) -> Any:

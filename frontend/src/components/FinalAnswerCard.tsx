@@ -21,6 +21,14 @@ export function FinalAnswerCard({
       <div className="flex items-center gap-2">
         <MessageSquareText className="size-4 text-accent" />
         <h3 className="text-sm font-semibold text-accent">Final answer</h3>
+        {final.promptVersion && (
+          <span
+            className="ml-auto rounded-full bg-indigo-500/15 px-2 py-0.5 text-[11px] font-medium text-accent/80 ring-1 ring-indigo-500/30"
+            title="Instructions version used for this answer"
+          >
+            Prompt v{final.promptVersion.version}
+          </span>
+        )}
       </div>
 
       {final.terminatedBy === "iteration_limit" && (

@@ -159,6 +159,49 @@ class TestReads:
         body = res.json()["prompts"]
         assert set(body) == {"agent_system", "judge_rubric"}
         assert body["agent_system"][0]["status"] == "promoted"
+        # The console's read-only switch rides on this flag.
+        assert res.json()["adminEnabled"] is True
+
+    async def test_list_prompts_reports_admin_enabled(self, tmp_path: Path) -> None:
+        reg = _registry(tmp_path)
+        app = create_app(_web_deps(_api_deps(reg, admin=True)))
+        async with _client(app) as c:
+            res = await c.get("/api/prompts")
+        assert res.json()["adminEnabled"] is True
+
+    async def test_ab_result_endpoint(self, tmp_path: Path) -> None:
+        """GET /{name}/ab-result?candidate=v — 404 without evidence, the
+        persisted wire result when a completed run saved it, 400 without the
+        candidate param."""
+        reg = _registry(tmp_path)
+        out_dir = tmp_path / "ab"
+        app = create_app(_web_deps(_api_deps(reg, ab_results_dir=out_dir)))
+        async with _client(app) as c:
+            missing = await c.get("/api/prompts/agent_system/ab-result?candidate=1")
+            no_param = await c.get("/api/prompts/agent_system/ab-result")
+            wire = {
+                "name": "agent_system",
+                "baselineVersion": 1,
+                "candidateVersion": 1,
+                "baselineSha256": "a" * 64,
+                "candidateSha256": "b" * 64,
+                "mode": "live",
+                "judged": True,
+                "baseline": {},
+                "candidate": {},
+                "deltas": {},
+                "regressions": [],
+                "gatePassed": True,
+                "promotionAllowed": True,
+            }
+            out_dir.mkdir(parents=True, exist_ok=True)
+            fname = f"agent_system-b1-c1-{'b' * 8}-20261023-000000.json"
+            (out_dir / fname).write_text(json.dumps(wire), encoding="utf-8")
+            found = await c.get("/api/prompts/agent_system/ab-result?candidate=1")
+        assert missing.status_code == 404
+        assert no_param.status_code == 400
+        assert found.status_code == 200
+        assert found.json()["candidateVersion"] == 1
 
     async def test_show_name_and_version(self, tmp_path: Path) -> None:
         reg = _registry(tmp_path)

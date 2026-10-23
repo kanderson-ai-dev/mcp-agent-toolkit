@@ -74,6 +74,8 @@ class Settings(BaseSettings):
 
     # ── Prompt Registry ───────────────────────────────────────────────
     prompt_registry_dir: str = "prompts"
+    prompt_audit_path: str = "data/prompt-registry/audit.jsonl"
+    prompt_ab_results_dir: str = "data/prompt-registry/ab"
     prompt_version_agent_system: str = "latest-promoted"
     prompt_version_judge_rubric: str = "latest-promoted"
     enable_prompt_admin: bool = False

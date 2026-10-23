@@ -149,6 +149,94 @@ export function argsSummary(toolName: string, args: Record<string, unknown>): st
   }
 }
 
+/* ── Prompt Registry labels ──────────────────────────────────────
+ * Registry raw ids (`agent_system`, `rolled_back`, `task_success`…)
+ * never render — these maps are the only source of visible copy.
+ */
+
+const PROMPT_NAME_LABEL: Record<string, string> = {
+  agent_system: "Agent system prompt",
+  judge_rubric: "Judge rubric",
+};
+
+/** Prompt registry name → friendly title (fallback humanizes). */
+export function promptNameLabel(name: string): string {
+  return PROMPT_NAME_LABEL[name] ?? humanizeName(name);
+}
+
+/** Registry lifecycle status → badge copy. */
+export const PROMPT_STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  candidate: "Candidate",
+  promoted: "Active",
+  rolled_back: "Rolled back",
+};
+
+export function promptStatusLabel(status: string): string {
+  return PROMPT_STATUS_LABEL[status] ?? humanizeName(status);
+}
+
+const METRIC_LABEL: Record<string, string> = {
+  taskSuccess: "Task success",
+  grounding: "Grounding",
+  toolUsage: "Tool use",
+  toolUsageAppropriatePct: "Appropriate tool use",
+  adversarialResisted: "Adversarial resistance",
+};
+
+/** A/B metric id → "Task success" etc. */
+export function metricLabel(metric: string): string {
+  return METRIC_LABEL[metric] ?? humanizeName(metric);
+}
+
+/**
+ * Server regression strings start with a raw metric id
+ * (`taskSuccess: 4.50 → 4.20 (regression +0.30)`). The leading token is
+ * swapped for its friendly label; anything unrecognized passes through.
+ */
+export function regressionLabel(text: string): string {
+  const m = /^([A-Za-z]+):\s*(.*)$/.exec(text);
+  if (!m) return text;
+  const label = METRIC_LABEL[m[1]!];
+  return label ? `${label}: ${m[2]}` : text;
+}
+
+/** A/B progress phases → human wording. */
+export function abPhaseLabel(phase: string): string {
+  switch (phase) {
+    case "baseline":
+      return "Active version";
+    case "candidate":
+      return "Candidate";
+    case "done":
+      return "Done";
+    default:
+      return humanizeName(phase);
+  }
+}
+
+/**
+ * Server progress lines embed raw ids (`agent_system@v1`). Rewrites
+ * `name@vN` → friendly title + version; everything else passes through.
+ */
+export function abProgressLabel(text: string): string {
+  return text.replace(/(\w+)@v(\d+)/g, (_m, name: string, ver: string) =>
+    `${promptNameLabel(name)} v${ver}`,
+  );
+}
+
+const AUDIT_EVENT_LABEL: Record<string, string> = {
+  candidate_created: "Candidate created",
+  ab_test: "A/B test run",
+  promoted: "Promoted",
+  promoted_override: "Promoted with override",
+  rolled_back: "Rolled back",
+};
+
+export function auditEventLabel(event: string): string {
+  return AUDIT_EVENT_LABEL[event] ?? humanizeName(event);
+}
+
 /** Whether an argument summary renders as inline code (SQL, paths). */
 export function argsAreCode(toolName: string): boolean {
   return toolName === "db_query" || toolName === "read_file" || toolName === "write_file";

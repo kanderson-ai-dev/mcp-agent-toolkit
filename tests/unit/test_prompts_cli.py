@@ -109,7 +109,7 @@ def _evidence(allowed: bool, mode: str = "live") -> dict[str, Any]:
 def test_promote_without_evidence_exits_3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     reg = _registry(tmp_path)
     _with_candidate(reg)
-    monkeypatch.setattr(cli, "latest_ab_result", lambda name, v: None)
+    monkeypatch.setattr(cli, "latest_ab_result", lambda name, v, **_kw: None)
     rc = cli.cmd_promote(reg, _ns(name="agent_system", version=2, override_reason=None))
     assert rc == 3
     assert reg.get_promoted("agent_system").version == 1
@@ -118,7 +118,7 @@ def test_promote_without_evidence_exits_3(tmp_path: Path, monkeypatch: pytest.Mo
 def test_promote_blocked_on_failed_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     reg = _registry(tmp_path)
     _with_candidate(reg)
-    monkeypatch.setattr(cli, "latest_ab_result", lambda name, v: _evidence(allowed=False))
+    monkeypatch.setattr(cli, "latest_ab_result", lambda name, v, **_kw: _evidence(allowed=False))
     rc = cli.cmd_promote(reg, _ns(name="agent_system", version=2, override_reason=None))
     assert rc == 3
     assert reg.get_promoted("agent_system").version == 1
@@ -127,7 +127,7 @@ def test_promote_blocked_on_failed_gate(tmp_path: Path, monkeypatch: pytest.Monk
 def test_promote_with_passing_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     reg = _registry(tmp_path)
     _with_candidate(reg)
-    monkeypatch.setattr(cli, "latest_ab_result", lambda name, v: _evidence(allowed=True))
+    monkeypatch.setattr(cli, "latest_ab_result", lambda name, v, **_kw: _evidence(allowed=True))
     rc = cli.cmd_promote(reg, _ns(name="agent_system", version=2, override_reason=None))
     assert rc == 0
     assert reg.get_promoted("agent_system").version == 2
@@ -143,7 +143,7 @@ def test_promote_offline_evidence_still_blocked(
     monkeypatch.setattr(
         cli,
         "latest_ab_result",
-        lambda name, v: {
+        lambda name, v, **_kw: {
             "name": "agent_system",
             "candidateVersion": 2,
             "mode": "offline-smoke",
