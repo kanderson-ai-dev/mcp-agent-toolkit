@@ -330,3 +330,43 @@ async def test_file_tools_reject_traversal(tmp_path: Path) -> None:
         await write.handler(path="../evil.txt", content="x", ctx=CTX)
     with pytest.raises(ToolError):
         await read.handler(path=os.path.join("..", "..", "etc", "passwd"), ctx=CTX)
+
+
+# ── MCP resources: reports://schema and sandbox://index bodies ─────────
+
+
+def test_read_schema_dumps_db_ddl(tmp_path: Path) -> None:
+    """reports://schema returns the fixture DB's CREATE statements."""
+    from mcp_toolkit.server.app import _read_schema
+
+    db = tmp_path / "demo.db"
+    seed_demo_db(db)
+    text = _read_schema(str(db))
+    assert "CREATE TABLE" in text.upper()
+    assert "reports" in text
+
+
+def test_sandbox_index_lists_and_caps(tmp_path: Path) -> None:
+    """sandbox://index lists sandbox-relative paths + sizes, capped."""
+    from mcp_toolkit.server.app import _SANDBOX_INDEX_LIMIT, _sandbox_index
+
+    (tmp_path / "a.txt").write_text("alpha")
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "b.md").write_text("beta")
+    text = _sandbox_index(tmp_path)
+    assert "a.txt" in text and "nested/b.md" in text or "nested\\b.md" in text
+    assert "bytes" in text
+
+    # Over the cap → explicit truncation note, never a silent slice.
+    many = tmp_path / "many"
+    many.mkdir()
+    for i in range(_SANDBOX_INDEX_LIMIT + 5):
+        (many / f"f{i:03}.txt").write_text("x")
+    capped = _sandbox_index(many)
+    assert "listing capped" in capped
+
+
+def test_sandbox_index_empty(tmp_path: Path) -> None:
+    from mcp_toolkit.server.app import _sandbox_index
+
+    assert _sandbox_index(tmp_path) == "(sandbox is empty)"

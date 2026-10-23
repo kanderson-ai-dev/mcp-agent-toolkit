@@ -62,11 +62,30 @@ class WebDeps:
     # budget gate unevaluable).
     budget_usd: float | None = None
     price_per_mtok: tuple[float, float] | None = None
+    # Live scorecard artifact for GET /api/status — read lazily per
+    # request so a freshly committed scorecard shows up without restart.
+    # Absent in deployments that do not ship evaluation/.
+    scorecard_path: Path = Path("evaluation/scorecard.json")
 
 
 def _deps(request: Request) -> WebDeps:
     deps: WebDeps = request.app.state.deps
     return deps
+
+
+def _last_evaluation(path: Path) -> dict[str, Any] | None:
+    """Read the committed scorecard's public fields; any unreadable or
+    malformed artifact degrades to ``None`` rather than an error."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        aggregate = data["aggregate"]
+        return {
+            "ranAt": data["ranAt"],
+            "passed": bool(aggregate["passed"]),
+            "mode": data.get("mode"),
+        }
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
 
 
 def create_app(
@@ -100,6 +119,29 @@ def create_app(
     @app.get("/api/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/status")
+    async def status(request: Request) -> dict[str, Any]:
+        """Public-safe deployment summary: provider mode, tool count,
+        active prompt versions and the last committed evaluation's
+        pass/fail — no scores, paths or model internals."""
+        d = _deps(request)
+        prompts: dict[str, Any] = {}
+        provider = d.prompt_provider
+        if provider is not None:
+            prompts["agentSystem"] = {"version": provider().version}
+        else:
+            prompts["agentSystem"] = {"version": d.agent_prompt.version}
+        registry = d.prompt_api.registry if d.prompt_api is not None else None
+        if registry is not None:
+            judge = registry.get_promoted("judge_rubric")
+            prompts["judgeRubric"] = {"version": judge.version}
+        return {
+            "mode": d.llm.name,
+            "toolCount": len(d.discovered_tools),
+            "prompts": prompts,
+            "lastEvaluation": _last_evaluation(d.scorecard_path),
+        }
 
     @app.get("/api/tools")
     async def tools(request: Request) -> dict[str, Any]:

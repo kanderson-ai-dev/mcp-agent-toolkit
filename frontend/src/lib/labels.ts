@@ -273,6 +273,18 @@ export function auditEventLabel(event: string): string {
   return AUDIT_EVENT_LABEL[event] ?? humanizeName(event);
 }
 
+/** Provider mode → footer wording ("Demo mode", never a raw name). */
+export function modeLabel(mode: string): string {
+  switch (mode) {
+    case "stub":
+      return "Demo mode";
+    case "openai":
+      return "Live mode";
+    default:
+      return humanizeName(mode);
+  }
+}
+
 /** Whether an argument summary renders as inline code (SQL, paths). */
 export function argsAreCode(toolName: string): boolean {
   return toolName === "db_query" || toolName === "read_file" || toolName === "write_file";

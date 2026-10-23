@@ -1,4 +1,4 @@
-import type { ToolsInfo } from "../types";
+import type { StatusInfo, ToolsInfo } from "../types";
 
 /** HTTP client for the FastAPI adapter (src/mcp_toolkit/web/). Same-origin
  * always — Vite proxies `/api` in dev; FastAPI serves the build in
@@ -28,6 +28,12 @@ export async function fetchTools(): Promise<ToolsInfo> {
   const res = await fetch("/api/tools");
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   return (await res.json()) as ToolsInfo;
+}
+
+export async function fetchStatus(): Promise<StatusInfo> {
+  const res = await fetch("/api/status");
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as StatusInfo;
 }
 
 /** POST the question; returns the one-time runId for the SSE stream. */

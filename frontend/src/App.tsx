@@ -4,13 +4,14 @@ import { Header } from "./components/Header";
 import { PromptComposer } from "./components/PromptComposer";
 import { RegistryView } from "./components/registry/RegistryView";
 import { RunView } from "./components/RunView";
-import { ApiError, fetchTools, submitQuestion } from "./lib/api";
-import { toolMeta } from "./lib/labels";
+import { ApiError, fetchStatus, fetchTools, submitQuestion } from "./lib/api";
+import { modeLabel, toolMeta } from "./lib/labels";
 import { streamRun } from "./lib/sse";
 import type {
   AgentEvent,
   ConsolePhase,
   RunRecord,
+  StatusInfo,
   TimelineStep,
   ToolsInfo,
 } from "./types";
@@ -56,6 +57,7 @@ function applyEvent(steps: TimelineStep[], event: AgentEvent): TimelineStep[] {
 
 export default function App() {
   const [toolsInfo, setToolsInfo] = useState<ToolsInfo | null>(null);
+  const [status, setStatus] = useState<StatusInfo | null>(null);
   const [apiDown, setApiDown] = useState(false);
   const [phase, setPhase] = useState<ConsolePhase>("idle");
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -69,6 +71,9 @@ export default function App() {
     fetchTools()
       .then(setToolsInfo)
       .catch(() => setApiDown(true));
+    fetchStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null));
   }, []);
 
   // Follow the stream only while the reader sits near the bottom —
@@ -253,6 +258,22 @@ export default function App() {
         )}
         <div ref={bottomRef} />
       </main>
+
+      {status && (
+        <footer className="border-t border-line/60 px-4 py-3 text-center text-[11px] text-muted sm:px-6">
+          {[
+            modeLabel(status.mode),
+            status.prompts.agentSystem
+              ? `Agent prompt v${status.prompts.agentSystem.version}`
+              : null,
+            status.lastEvaluation
+              ? `Last evaluation: ${status.lastEvaluation.passed ? "passed" : "failed"}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </footer>
+      )}
 
       {tab === "console" && (
         <PromptComposer

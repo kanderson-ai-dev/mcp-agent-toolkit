@@ -1,0 +1,14 @@
+title = "mcp-agent-toolkit gitleaks config"
+
+[extend]
+useDefault = true
+
+# Intentional fixture secrets — key-shaped literals that exist only to
+# prove the redaction pipeline censors them and the audit log rejects
+# key-looking strings. Never real credentials; scoped to those test files.
+[[allowlists]]
+description = "Fixture secrets inside negative-path tests"
+paths = [
+  '''tests/unit/test_prompt_audit\.py''',
+  '''tests/unit/test_metrics\.py''',
+]

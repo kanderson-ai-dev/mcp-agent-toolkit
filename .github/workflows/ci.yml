@@ -37,7 +37,7 @@ jobs:
       - name: Test (offline, deterministic)
         run: >
           uv run pytest -q --cov=src --cov-branch
-          --cov-report=xml --cov-fail-under=90
+          --cov-report=xml --cov-fail-under=92
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -64,5 +64,78 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      - name: Requirements freshness
+        run: |
+          uv export --frozen --no-emit-project -o requirements.ci.txt
+          diff requirements.txt requirements.ci.txt
+
       - name: Dependency audit
-        run: uv run pip-audit --strict
+        # Audits the locked export: pip-audit cannot resolve the local
+        # project itself (it is not published to PyPI).
+        run: uv run pip-audit -r requirements.txt --strict
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the console
+        run: npm --prefix frontend ci && npm --prefix frontend run build
+
+      - name: Install Chromium for Playwright
+        run: uv run playwright install --with-deps chromium
+
+      - name: E2E (offline, deterministic)
+        run: uv run pytest tests/e2e -q
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t mcp-agent-toolkit .
+
+      - name: Boot the web adapter in the container
+        run: |
+          docker run -d --name app -p 8123:8123 \
+            -e LLM_PROVIDER=stub -e SEARCH_PROVIDER=none -e WEB_PORT=8123 \
+            mcp-agent-toolkit python -m mcp_toolkit.web
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8123/api/health; then
+              break
+            fi
+            [ "$i" = "45" ] && { docker logs app; exit 1; }
+            sleep 1
+          done
+
+      - name: Assert the container runs as non-root
+        run: docker exec app id -u | grep -q '^10001$'
+
+      - name: Assert the prompt registry ships in the image
+        run: docker exec app test -f /app/prompts/agent_system/v1.yaml

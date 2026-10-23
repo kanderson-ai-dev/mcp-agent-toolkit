@@ -117,6 +117,18 @@ export interface ToolsInfo {
   llm: { provider: string };
 }
 
+/** `GET /api/status` — public-safe deployment summary for the footer. */
+export interface StatusInfo {
+  mode: string;
+  toolCount: number;
+  prompts: Record<string, { version: number }>;
+  lastEvaluation: {
+    ranAt: string;
+    passed: boolean;
+    mode: string | null;
+  } | null;
+}
+
 /* ── Prompt Registry ──────────────────────────────────────────────
  * Wire mirrors of src/mcp_toolkit/web/prompts_routes.py responses.
  * Field names stay camelCase on the wire; friendly labels live in

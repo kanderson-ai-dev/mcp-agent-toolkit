@@ -89,6 +89,9 @@ def _deps(llm: Any, **overrides: Any) -> WebDeps:
         heartbeat_s=overrides.get("heartbeat_s", 15.0),
         cors_origin=overrides.get("cors_origin"),
         static_dir=overrides.get("static_dir"),
+        prompt_provider=overrides.get("prompt_provider"),
+        prompt_api=overrides.get("prompt_api"),
+        scorecard_path=overrides.get("scorecard_path", Path("nonexistent-scorecard.json")),
     )
 
 
@@ -123,6 +126,60 @@ class TestEndpoints:
         assert tools["web_search"]["outputSchema"]["type"] == "object"
         assert tools["db_query"]["annotations"] is None
         assert tools["db_query"]["outputSchema"] is None
+
+    async def test_status_public_summary_without_scorecard(self, tmp_path: Path) -> None:
+        deps = _deps(ScriptedLLM([]), scorecard_path=tmp_path / "absent.json")
+        async with _client(create_app(deps)) as c:
+            res = await c.get("/api/status")
+        body = res.json()
+        assert res.status_code == 200
+        assert body["mode"] == "scripted"
+        assert body["toolCount"] == 2
+        assert body["prompts"]["agentSystem"] == {"version": 1}
+        assert "judgeRubric" not in body["prompts"]  # no registry wired
+        assert body["lastEvaluation"] is None
+        # The payload is public-safe: no absolute paths or internals.
+        assert str(tmp_path) not in res.text
+
+    async def test_status_reads_committed_scorecard(self, tmp_path: Path) -> None:
+        card = tmp_path / "scorecard.json"
+        card.write_text(
+            json.dumps(
+                {
+                    "version": "1.1.0",
+                    "datasetVersion": "1.2.0",
+                    "ranAt": "2026-10-23T18:21:49Z",
+                    "mode": "live",
+                    "aggregate": {"passed": True},
+                    "results": [{"secret": "detail"}],
+                }
+            )
+        )
+        deps = _deps(ScriptedLLM([]), scorecard_path=card)
+        async with _client(create_app(deps)) as c:
+            body = (await c.get("/api/status")).json()
+        assert body["lastEvaluation"] == {
+            "ranAt": "2026-10-23T18:21:49Z",
+            "passed": True,
+            "mode": "live",
+        }
+        # Per-question detail never leaves the process.
+        assert "secret" not in json.dumps(body)
+
+    async def test_status_scorecard_malformed_degrades_to_null(self, tmp_path: Path) -> None:
+        card = tmp_path / "scorecard.json"
+        card.write_text("{ not json")
+        deps = _deps(ScriptedLLM([]), scorecard_path=card)
+        async with _client(create_app(deps)) as c:
+            body = (await c.get("/api/status")).json()
+        assert body["lastEvaluation"] is None
+
+    async def test_status_uses_prompt_provider_when_hot_swapped(self) -> None:
+        promoted = test_prompt().__class__(name="agent_system", version=7, sha256="x", template="t")
+        deps = _deps(ScriptedLLM([]), prompt_provider=lambda: promoted)
+        async with _client(create_app(deps)) as c:
+            body = (await c.get("/api/status")).json()
+        assert body["prompts"]["agentSystem"] == {"version": 7}
 
     async def test_post_chat_returns_runid_201(self) -> None:
         async with _client(create_app(_deps(ScriptedLLM([])))) as c:

@@ -7,6 +7,7 @@ import {
   auditEventLabel,
   errorCodeLabel,
   metricLabel,
+  modeLabel,
   promptNameLabel,
   promptStatusLabel,
   providerLabel,
@@ -251,5 +252,11 @@ describe("humanize helpers", () => {
     expect(humanizeUsd(0.0007)).toBe("~$0.0007");
     expect(humanizeUsd(0.4213)).toBe("~$0.42");
     expect(humanizeUsd(-1)).toBe("—");
+  });
+
+  it("labels provider modes for the footer — never the raw name", () => {
+    expect(modeLabel("stub")).toBe("Demo mode");
+    expect(modeLabel("openai")).toBe("Live mode");
+    expect(modeLabel("some_future")).toBe("Some future");
   });
 });
