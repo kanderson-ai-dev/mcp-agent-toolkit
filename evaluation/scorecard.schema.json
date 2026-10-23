@@ -158,6 +158,19 @@
           "title": "Prompt",
           "type": "string"
         },
+        "promptVersion": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Promptversion"
+        },
         "toolCalls": {
           "items": {
             "$ref": "#/$defs/ScorecardToolCall"

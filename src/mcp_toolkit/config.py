@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     web_port: int = Field(default=3000, ge=1, le=65535)
     web_cors_origin: str = "http://localhost:5173"
 
+    # ── Prompt Registry ───────────────────────────────────────────────
+    prompt_registry_dir: str = "prompts"
+    prompt_version_agent_system: str = "latest-promoted"
+    prompt_version_judge_rubric: str = "latest-promoted"
+    enable_prompt_admin: bool = False
+
     @field_validator("*", mode="wrap")
     @classmethod
     def _empty_str_is_absent(

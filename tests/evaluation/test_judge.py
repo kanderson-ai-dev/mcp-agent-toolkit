@@ -11,6 +11,8 @@ from evaluation.checks import RecordedToolCall
 from evaluation.dataset import load_dataset
 from evaluation.judge import JudgeError, JudgeInput, judge_run
 
+RUBRIC = "Grade strictly."
+
 
 def _question(qid: str = "st-01"):
     return next(q for q in load_dataset().questions if q.id == qid)
@@ -57,7 +59,7 @@ GOOD = json.dumps(
 
 async def test_valid_judge_output_parses() -> None:
     client = _client([GOOD])
-    scores = await judge_run(client, "gpt-4o-mini", _input())
+    scores = await judge_run(client, "gpt-4o-mini", _input(), rubric=RUBRIC)
     assert scores.task_success == 5
     assert scores.grounding == 4
     assert scores.tool_usage == 5
@@ -69,7 +71,7 @@ async def test_out_of_range_scores_fail_to_one() -> None:
     payload = json.dumps(
         {"task_success": 99, "grounding": "high", "tool_usage": 3, "rationale": "x"}
     )
-    scores = await judge_run(_client([payload]), "m", _input())
+    scores = await judge_run(_client([payload]), "m", _input(), rubric=RUBRIC)
     assert scores.task_success == 1  # 99 is out of range → 1
     assert scores.grounding == 1  # non-numeric → 1
     assert scores.tool_usage == 3
@@ -77,20 +79,20 @@ async def test_out_of_range_scores_fail_to_one() -> None:
 
 async def test_malformed_output_retries_once_then_raises() -> None:
     client = _client(["{not json", GOOD])
-    scores = await judge_run(client, "m", _input())
+    scores = await judge_run(client, "m", _input(), rubric=RUBRIC)
     assert scores.task_success == 5
     assert client.chat.completions.calls == 2
 
     broken = _client(["{not json", "also not json"])
     with pytest.raises(JudgeError):
-        await judge_run(broken, "m", _input())
+        await judge_run(broken, "m", _input(), rubric=RUBRIC)
     assert broken.chat.completions.calls == 2
 
 
 async def test_non_object_json_raises_judge_error() -> None:
     client = _client(["[1,2,3]", "[4,5,6]"])
     with pytest.raises(JudgeError):
-        await judge_run(client, "m", _input())
+        await judge_run(client, "m", _input(), rubric=RUBRIC)
 
 
 async def test_adversarial_resistance_flag_parses() -> None:
@@ -103,5 +105,5 @@ async def test_adversarial_resistance_flag_parses() -> None:
             "rationale": "Refused the DROP TABLE.",
         }
     )
-    scores = await judge_run(_client([payload]), "m", _input("ad-01"))
+    scores = await judge_run(_client([payload]), "m", _input("ad-01"), rubric=RUBRIC)
     assert scores.adversarial_resistance is True

@@ -20,6 +20,7 @@ from mcp_toolkit.client.llm.types import (
     ToolCallDef,
 )
 from mcp_toolkit.client.mcp_client import DiscoveredTool, ToolOutcome
+from tests.helpers import test_prompt
 
 
 class ScriptedLLM:
@@ -67,6 +68,7 @@ def _deps(
         tools=[_tool("web_search"), _tool("db_query")],
         max_iterations=max_iter,
         emit=events.append,
+        prompt=test_prompt(),
     )
 
 
@@ -172,6 +174,7 @@ async def test_llm_failure_propagates() -> None:
         tools=[],
         max_iterations=2,
         emit=events.append,
+        prompt=test_prompt(),
     )
     # The oracle propagates LLM failures — the loop must too (caller
     # decides retry/abort); assert the exception surfaces unchanged.

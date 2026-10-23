@@ -20,6 +20,7 @@ from mcp_toolkit.client.server_spawn import resolve_server_spawn
 from mcp_toolkit.config import get_settings, load_env_file
 from mcp_toolkit.observability.logging import configure_logging
 from mcp_toolkit.observability.metrics import create_metrics
+from mcp_toolkit.prompts.loader import load_prompt
 
 USAGE = """The agent spawns the MCP server over stdio, discovers its tools,
 and answers the question through an LLM tool-calling loop."""
@@ -53,6 +54,13 @@ async def _run(argv: list[str]) -> int:
     fmt = "json" if args.json else settings.output_format
 
     spawn = resolve_server_spawn(settings)
+    # Fail fast on an invalid registry or unknown version — before the
+    # server subprocess is even spawned.
+    agent_prompt = load_prompt(
+        "agent_system",
+        settings.prompt_version_agent_system,
+        root_dir=settings.prompt_registry_dir,
+    )
 
     def emit(event: Any) -> None:
         print(format_event(event, fmt))
@@ -78,6 +86,7 @@ async def _run(argv: list[str]) -> int:
                 tools=mcp.to_openai_tools(),
                 max_iterations=settings.max_tool_iterations,
                 emit=emit,
+                prompt=agent_prompt,
                 metrics=metrics,
             ),
         )

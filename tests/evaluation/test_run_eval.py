@@ -20,6 +20,7 @@ from evaluation.scorecard import CheckResult, Scorecard, ScorecardEntry
 
 from mcp_toolkit.client.llm.stub_llm import StubLLM
 from mcp_toolkit.client.mcp_client import DiscoveredTool, ToolOutcome
+from tests.helpers import test_prompt
 
 
 class FakeInvoker:
@@ -45,6 +46,7 @@ def _deps() -> EvalDeps:
         invoker=FakeInvoker(),
         tools=_tools("web_search", "db_query", "read_file", "write_file"),
         max_iterations=8,
+        agent_prompt=test_prompt(),
     )
 
 

@@ -46,12 +46,23 @@ class LlmMessageEvent(_EventModel):
     content: str
 
 
+class PromptVersionRef(_EventModel):
+    """Provenance of the prompt that produced a run — name, registry
+    version and template fingerprint."""
+
+    name: str
+    version: int
+    sha256: str
+
+
 class FinalEvent(_EventModel):
     type: Literal["final"] = "final"
     content: str
     iterations: int
     tool_calls: int
     terminated_by: Literal["answer", "iteration_limit"]
+    prompt_version: PromptVersionRef | None = None
+    """Additive/optional: which registered prompt produced this run."""
 
 
 class ErrorEvent(_EventModel):

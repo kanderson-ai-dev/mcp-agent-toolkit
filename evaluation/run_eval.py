@@ -47,6 +47,7 @@ from mcp_toolkit.client.mcp_client import McpAgentClient, ToolInvoker, server_en
 from mcp_toolkit.client.server_spawn import resolve_server_spawn
 from mcp_toolkit.config import Settings, get_settings, load_env_file
 from mcp_toolkit.observability.logging import configure_logging, get_logger
+from mcp_toolkit.prompts.loader import LoadedPrompt, load_prompt
 
 if TYPE_CHECKING:
     from langsmith import Client as LangSmithClient
@@ -74,6 +75,7 @@ class EvalDeps:
     invoker: ToolInvoker
     tools: list[OpenAIToolDef]
     max_iterations: int
+    agent_prompt: LoadedPrompt
 
 
 async def run_question(deps: EvalDeps, prompt: str) -> QuestionOutput:
@@ -102,6 +104,7 @@ async def run_question(deps: EvalDeps, prompt: str) -> QuestionOutput:
                 tools=deps.tools,
                 max_iterations=deps.max_iterations,
                 emit=emit,
+                prompt=deps.agent_prompt,
             ),
         )
     except Exception as exc:
@@ -135,11 +138,13 @@ def build_entry(
     duration_ms: int,
     judge: JudgeScores | None = None,
     judge_error: str | None = None,
+    prompt_version: dict[str, Any] | None = None,
 ) -> ScorecardEntry:
     return ScorecardEntry(
         id=q.id,
         category=q.category,
         prompt=q.prompt,
+        prompt_version=prompt_version,
         tool_calls=[
             ScorecardToolCall(
                 tool=c.tool,
@@ -242,7 +247,16 @@ async def run_evaluation(
         output = await run_question(deps, q.prompt)
         duration_ms = round((time.perf_counter() - t0) * 1000)
         scores, judge_error = await _judge_or_error(judge_fn, q, output)
-        entries.append(build_entry(q, output, duration_ms, scores, judge_error))
+        entries.append(
+            build_entry(
+                q,
+                output,
+                duration_ms,
+                scores,
+                judge_error,
+                prompt_version=deps.agent_prompt.ref,
+            )
+        )
         print(f"{duration_ms / 1000:.1f}s, {len(output.tool_calls)} tool calls")
     return entries
 
@@ -362,7 +376,14 @@ async def _run_langsmith_experiment(
             q = require_q(str(inputs.get("questionId")))
             t0 = time.perf_counter()
             output = await run_question(deps, q.prompt)
-            entries.append(build_entry(q, output, round((time.perf_counter() - t0) * 1000)))
+            entries.append(
+                build_entry(
+                    q,
+                    output,
+                    round((time.perf_counter() - t0) * 1000),
+                    prompt_version=deps.agent_prompt.ref,
+                )
+            )
             return _output_wire(output)
 
         def deterministic_evaluator(run: Run, example: Example | None) -> EvaluationResults:
@@ -432,6 +453,8 @@ async def _run_langsmith_experiment(
                 "datasetVersion": dataset.version,
                 "model": settings.chat_model_name,
                 "harness": "evaluation/run_eval.py",
+                "agentSystemPromptVersion": deps.agent_prompt.version,
+                "agentSystemPromptSha256": deps.agent_prompt.sha256,
             },
             max_concurrency=1,
         )
@@ -497,6 +520,20 @@ async def _main() -> int:
     configure_logging(settings.log_level)
     dataset = load_dataset()
 
+    # Resolve both prompts from the registry before anything else — an
+    # invalid registry or unknown version fails the run fast, and every
+    # result records which prompt produced it.
+    agent_prompt = load_prompt(
+        "agent_system",
+        settings.prompt_version_agent_system,
+        root_dir=settings.prompt_registry_dir,
+    )
+    judge_prompt = load_prompt(
+        "judge_rubric",
+        settings.prompt_version_judge_rubric,
+        root_dir=settings.prompt_registry_dir,
+    )
+
     spawn = resolve_server_spawn(settings)
     env = server_env()
     if offline:
@@ -548,6 +585,7 @@ async def _main() -> int:
             invoker=mcp,
             tools=tools,
             max_iterations=settings.max_tool_iterations,
+            agent_prompt=agent_prompt,
         )
 
         judge_fn = None
@@ -579,6 +617,7 @@ async def _main() -> int:
                         tool_calls=o.tool_calls,
                         terminated_by=o.terminated_by,
                     ),
+                    rubric=judge_prompt.template,
                 )
 
         entries: list[ScorecardEntry] = []
@@ -601,6 +640,10 @@ async def _main() -> int:
         judge_model=None if offline else settings.chat_model_name,
         langsmith_experiment=langsmith_experiment,
         aggregate=summary,
+        prompts={
+            "agent_system": agent_prompt.ref,
+            "judge_rubric": judge_prompt.ref,
+        },
         results=entries,
     )
     path = SCORECARD_OFFLINE if offline else SCORECARD_LIVE

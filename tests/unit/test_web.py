@@ -21,6 +21,7 @@ from mcp_toolkit.client.mcp_client import DiscoveredTool, ToolOutcome
 from mcp_toolkit.web.app import WebDeps, create_app
 from mcp_toolkit.web.run_store import RunStore
 from mcp_toolkit.web.sse import frame
+from tests.helpers import test_prompt
 
 TOOLS = [
     DiscoveredTool(name="web_search", description="Search the web", input_schema={}),
@@ -75,6 +76,7 @@ def _deps(llm: Any, **overrides: Any) -> WebDeps:
         discovered_tools=TOOLS,
         llm=llm,
         max_iterations=4,
+        agent_prompt=test_prompt(),
         runs=overrides.get("runs", RunStore()),
         heartbeat_s=overrides.get("heartbeat_s", 15.0),
         cors_origin=overrides.get("cors_origin"),

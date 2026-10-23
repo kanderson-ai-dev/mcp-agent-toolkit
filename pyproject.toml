@@ -20,6 +20,7 @@ dependencies = [
     "pydantic>=2.14.1",
     "pydantic-settings>=2.16.1",
     "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.2",
     "structlog>=26.1.0",
     "tenacity>=9.2.1",
     "uvicorn>=0.40",
@@ -43,6 +44,7 @@ dev = [
     "respx>=0.23.1",
     "ruff>=0.17.2",
     "types-lxml>=2026.2.16",
+    "types-pyyaml>=6.0.12",
 ]
 
 [build-system]

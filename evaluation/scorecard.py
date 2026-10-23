@@ -49,6 +49,8 @@ class ScorecardEntry(_CamelModel):
     id: str
     category: str
     prompt: str
+    # Which registered prompt produced this run: {name, version, sha256}.
+    prompt_version: dict[str, Any] | None = None
     tool_calls: list[ScorecardToolCall] = Field(default_factory=list)
     iterations: int
     terminated_by: str

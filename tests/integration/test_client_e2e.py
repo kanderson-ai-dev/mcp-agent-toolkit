@@ -16,6 +16,7 @@ from mcp_toolkit.client.agent_loop import AgentLoopDeps, run_agent
 from mcp_toolkit.client.events import AgentEvent
 from mcp_toolkit.client.llm.stub_llm import StubLLM
 from mcp_toolkit.client.mcp_client import McpAgentClient, server_env
+from tests.helpers import test_prompt
 
 
 @pytest.fixture()
@@ -95,6 +96,7 @@ async def test_full_agent_loop_over_stdio(spawn_env: dict[str, str]) -> None:
                 tools=mcp.to_openai_tools(),
                 max_iterations=8,
                 emit=events.append,
+                prompt=test_prompt(),
             ),
         )
     assert result.terminated_by == "answer"
@@ -126,6 +128,7 @@ async def test_adversarial_loop_guardrail_rejects(spawn_env: dict[str, str]) -> 
                 tools=mcp.to_openai_tools(),
                 max_iterations=8,
                 emit=events.append,
+                prompt=test_prompt(),
             ),
         )
     assert result.terminated_by == "answer"
@@ -134,10 +137,15 @@ async def test_adversarial_loop_guardrail_rejects(spawn_env: dict[str, str]) -> 
     assert any(e.result and e.result.get("code") == "forbidden" for e in result_events)
 
 
+REPO = Path(__file__).resolve().parents[2]
+
+
 def _cli_env(work_env: dict[str, str]) -> dict[str, str]:
     env = dict(os.environ)
     env.update(work_env)
     env["LLM_PROVIDER"] = "stub"
+    # Tests run with cwd=tmp_path — the registry lives in the repo.
+    env["PROMPT_REGISTRY_DIR"] = str(REPO / "prompts")
     return env
 
 

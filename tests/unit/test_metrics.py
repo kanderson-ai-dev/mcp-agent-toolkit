@@ -27,6 +27,7 @@ from mcp_toolkit.server.guardrails.rate_limiter import RateLimiter
 from mcp_toolkit.server.guardrails.sql_guard import assert_read_only_select
 from mcp_toolkit.server.invocation import InvocationDeps, guarded_invoke
 from mcp_toolkit.server.tools.types import ToolDef
+from tests.helpers import test_prompt
 
 
 def _value(metrics: Metrics, name: str, labels: dict[str, str] | None = None) -> float:
@@ -104,8 +105,18 @@ class TestHistogram:
         m = create_metrics()
         m.record_agent_run("answer", 2)
         m.record_agent_run("iteration_limit", 8)
-        assert _value(m, "agent_runs_total", {"terminated_by": "answer"}) == 1
-        assert _value(m, "agent_runs_total", {"terminated_by": "iteration_limit"}) == 1
+        assert (
+            _value(m, "agent_runs_total", {"terminated_by": "answer", "prompt_version": "none"})
+            == 1
+        )
+        assert (
+            _value(
+                m,
+                "agent_runs_total",
+                {"terminated_by": "iteration_limit", "prompt_version": "none"},
+            )
+            == 1
+        )
         assert _value(m, "agent_iterations_count") == 2
         assert _value(m, "agent_iterations_sum") == pytest.approx(10)
         assert _value(m, "agent_iterations_bucket", {"le": "5.0"}) == 1
@@ -287,11 +298,19 @@ class TestAgentMetrics:
             tools=[],
             max_iterations=5,
             emit=lambda _e: None,
+            prompt=test_prompt(),
             metrics=m,
         )
         result = await run_agent("q", deps)
         assert result.terminated_by == "answer"
-        assert _value(m, "agent_runs_total", {"terminated_by": "answer"}) == 1
+        assert (
+            _value(
+                m,
+                "agent_runs_total",
+                {"terminated_by": "answer", "prompt_version": "agent_system@v1"},
+            )
+            == 1
+        )
         assert _value(m, "agent_iterations_count") == 1
         assert _value(m, "agent_iterations_sum") == pytest.approx(2)
 
@@ -312,7 +331,15 @@ class TestAgentMetrics:
             tools=[],
             max_iterations=2,
             emit=lambda _e: None,
+            prompt=test_prompt(),
             metrics=m,
         )
         await run_agent("q", deps)
-        assert _value(m, "agent_runs_total", {"terminated_by": "iteration_limit"}) == 1
+        assert (
+            _value(
+                m,
+                "agent_runs_total",
+                {"terminated_by": "iteration_limit", "prompt_version": "agent_system@v1"},
+            )
+            == 1
+        )

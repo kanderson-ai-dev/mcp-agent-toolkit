@@ -45,8 +45,10 @@ class Metrics:
     def record_guardrail_block(self, guardrail: str) -> None:
         self.guardrail_blocks.labels(guardrail=guardrail).inc()
 
-    def record_agent_run(self, terminated_by: str, iterations: int) -> None:
-        self.agent_runs.labels(terminated_by=terminated_by).inc()
+    def record_agent_run(
+        self, terminated_by: str, iterations: int, prompt_version: str = "none"
+    ) -> None:
+        self.agent_runs.labels(terminated_by=terminated_by, prompt_version=prompt_version).inc()
         self.agent_iterations.observe(iterations)
 
 
@@ -82,8 +84,8 @@ def create_metrics(registry: CollectorRegistry | None = None) -> Metrics:
         ),
         agent_runs=Counter(
             "agent_runs_total",
-            "Agent loop runs by termination reason",
-            ["terminated_by"],
+            "Agent loop runs by termination reason and prompt version",
+            ["terminated_by", "prompt_version"],
             registry=reg,
         ),
         agent_iterations=Histogram(

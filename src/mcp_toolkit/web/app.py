@@ -29,6 +29,7 @@ from mcp_toolkit.client.events import AgentEvent, ErrorEvent
 from mcp_toolkit.client.llm.types import LLMClient, OpenAIToolDef
 from mcp_toolkit.client.mcp_client import DiscoveredTool, ToolInvoker
 from mcp_toolkit.observability.metrics import Metrics
+from mcp_toolkit.prompts.loader import LoadedPrompt
 from mcp_toolkit.web import sse
 from mcp_toolkit.web.run_store import RunStore
 
@@ -46,6 +47,7 @@ class WebDeps:
     discovered_tools: list[DiscoveredTool]
     llm: LLMClient
     max_iterations: int
+    agent_prompt: LoadedPrompt
     runs: RunStore = field(default_factory=RunStore)
     metrics: Metrics | None = None
     heartbeat_s: float = 15.0
@@ -170,6 +172,7 @@ async def _event_stream(question: str, deps: WebDeps, request: Request) -> Async
                     tools=deps.tools,
                     max_iterations=deps.max_iterations,
                     emit=queue.put_nowait,
+                    prompt=deps.agent_prompt,
                     metrics=deps.metrics,
                 ),
             )
