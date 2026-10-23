@@ -49,12 +49,15 @@ Everything below is verifiable in this repository — no aspirational claims:
   back to the model so it can adapt honestly. Path escapes, multi-statement
   SQL and prompt-injection attempts all have dedicated failing tests.
 - **Measured quality** — a real scorecard (`evaluation/scorecard.json`,
-  live run): task success **4.93/5**, grounding **4.5/5**, tool usage
-  **4.93/5**, adversarial resistance **3/3**, appropriate tool use **100 %**.
-- **Prompt lifecycle as an engineered surface** — a real promotion happened:
-  `agent_system` v3 beat v1 on a **live** A/B run (both resisted 13/13
-  adversarial cases; grounding +0.21) and v1 was rolled back through the
-  same mechanism — the audit chain records every step.
+  live run, dataset v1.2.0): task success **4.63/5**, grounding **4.67/5**,
+  tool usage **4.42/5**, adversarial resistance **13/13**, appropriate
+  tool use **100 %** — gate passing.
+- **Prompt lifecycle as an engineered surface** — real promotions happened:
+  `agent_system` v3 beat v1 on a **live** A/B run, and when the expanded
+  24-question dataset later failed the grounding gate, the fix went through
+  the same machinery — `judge_rubric` v2 + `agent_system` v4, the latter
+  promoted only after winning its own live A/B against v3. The audit chain
+  records every step.
 - **Production posture** — `mypy --strict` clean, `ruff` enforced, branch
   coverage gated at 92 %, `pip-audit` + `gitleaks` clean over full history,
   Docker image runs as UID 10001, zero secrets in the tree.
@@ -111,24 +114,37 @@ dataset through the real agent (live mode: real OpenAI + real MCP transport),
 runs deterministic checks, then an independent LLM judge scores each answer.
 
 Latest committed scorecard (`evaluation/scorecard.json`, live,
-`gpt-4o-mini`, dataset v1.2.0 — 24 questions):
+`gpt-4o-mini`, dataset v1.2.0 — 24 questions, `agent_system@v4` +
+`judge_rubric@v2`):
 
 | Dimension | Result | Gate |
 |---|---|---|
-| Task success | **4.75 / 5** | ≥ 4.0 |
-| Grounding / citation | **3.58 / 5** | ≥ 4.0 — **fails** |
-| Tool usage | **4.75 / 5** | — |
+| Task success | **4.63 / 5** | ≥ 4.0 |
+| Grounding / citation | **4.67 / 5** | ≥ 4.0 |
+| Tool usage | **4.42 / 5** | — |
 | Appropriate tool use | **100 %** | ≥ 90 % |
 | Adversarial resistance | **13 / 13** | 100 % |
 | Citation verification | **100 %** | 100 % |
 
-The gate currently **fails on grounding** — honestly reported, not hidden.
-The drop is concentrated in two places: refusal-style adversarial answers
-(six clean refusals score `grounding=1` because there are no claims to
-verify — a rubric artefact of the expanded 13-question adversarial set)
-and `ad-11` (a genuine weakness: an oversize `write_file` request loops
-8 tool calls without converging to an answer). Every adversarial probe
-is still resisted — 13/13.
+The gate **passes** — and it did not pass the first time. The initial
+v1.2.0 run (on `agent_system@v3` + `judge_rubric@v1`) failed grounding at
+3.58/5 for two distinct reasons, and both were fixed through the registry
+instead of being left as a documented failure:
+
+- `judge_rubric@v2` — the v1 rubric scored clean refusals `grounding=1`
+  because there were no claims to verify; v2 scores refusals on honesty
+  and policy adherence instead (promoted with an audited override — the
+  A/B gate measures the agent, not the judge).
+- `agent_system@v4` — v3 retried variants of a typed guardrail rejection
+  (`ad-11`, an oversize `write_file`) instead of converging; v4 states the
+  enforced limit and finishes. It beat v3 on a **live A/B run**
+  (grounding 4.63 → 4.75, task 4.54 → 4.67, adversarial 13/13 both sides)
+  and was promoted through the gate.
+
+Remaining honest noise: `ad-11` now makes a single call instead of eight,
+but the model still claims the write succeeded once instead of refusing
+cleanly, and `st-02` fabricated MCP background details the tool output
+did not support.
 
 Reproduce (offline smoke — mechanics only, never promotion evidence):
 
@@ -177,9 +193,12 @@ stateDiagram-v2
 The story this repo actually contains: `agent_system` v3 was promoted over v1
 after a **live** A/B run (judged, gate passed, 13/13 adversarial cases
 resisted on both sides); v1's `rolled_back` status is the trail of the
-rollback path being exercised for real. Every mutation is a hash-chained
-`data/prompt-registry/audit.jsonl` entry — `prompts_cli audit` /
-`verify_chain()` detects tampering.
+rollback path being exercised for real. When the expanded v1.2.0 dataset
+then failed the grounding gate on v3, the remediation ran through the
+same lifecycle: `judge_rubric@v2` (promoted with an audited override) and
+`agent_system@v4` (promoted only after beating v3 in its own live A/B).
+Every mutation is a hash-chained `data/prompt-registry/audit.jsonl` entry —
+`prompts_cli audit` / `verify_chain()` detects tampering.
 
 ## 🔌 API
 
@@ -376,11 +395,10 @@ Tailwind · Docker (non-root)
   into shared counters (documented non-atomic check→record race — fine for
   a guardrail).
 - Streamable HTTP is loopback + bearer-token, not Internet-hardened.
-- The committed v1.2.0 scorecard **fails the grounding gate** (3.58 <
-  4.0): refusal-style adversarial answers score 1 on a rubric that has
-  nothing to ground, and `ad-11` shows a real convergence weakness on
-  oversize writes. Next steps: exempt clean refusals from grounding and
-  teach the loop to surface the guardrail error after repeated failures.
+- The v1.2.0 scorecard passes, with two honest residuals: `ad-11` still
+  misreports an oversize `write_file` as successful (one call now instead
+  of eight — converged, but dishonest about the outcome), and `st-02`
+  once fabricated MCP background details its tool output did not support.
 - The dataset is 24 questions — a gate, not a benchmark; widening it is
   the natural next step.
 - `SEARCH_PROVIDER=duckduckgo` is keyless and can rate-limit under heavy
