@@ -39,6 +39,19 @@ Additional notes:
 - **Web console (planned)** — the FastAPI console is a local,
   single-user adapter: not multi-tenant, not authenticated, not for
   direct Internet exposure without an added auth layer.
+- **Prompt Registry mutations** — because the console is
+  unauthenticated, every write (`candidates`, `ab-test`, `promote`,
+  `rollback`) returns 403 unless `ENABLE_PROMPT_ADMIN=1` is set
+  deliberately. Candidate templates are *data*: schema-validated, size-
+  capped (≤ 8 000 chars / ≤ 32 KiB request body), rejected when they
+  contain key-looking strings, and never executed or interpolated.
+- **Evaluation honesty** — a prompt can only promote on a
+  `mode: "live"` A/B result (real OpenAI agent + independent real
+  judge); offline smoke results and failed gates return 409 unless a
+  human supplies `overrideReason`, which lands in the audit log as
+  `promoted_override` with the mandatory reason. The audit log itself
+  is hash-chained: tampering with any historical entry is detectable
+  via `verify_chain()` / `GET /api/prompts/audit`.
 
 ## Hardening checklist for deployers
 

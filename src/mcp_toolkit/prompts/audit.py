@@ -45,15 +45,28 @@ _KEY_LIKE_RE = re.compile(
 )
 
 
+def looks_key_like(text: str) -> bool:
+    """True when ``text`` contains a credential-shaped string — used by
+    API surfaces to reject secrets in templates, descriptions and
+    reasons before they could be persisted."""
+    return _KEY_LIKE_RE.search(text) is not None
+
+
 def canonical_json(obj: Any) -> str:
     """Deterministic JSON: sorted keys, compact separators, UTF-8."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _check_reason_safety(event: dict[str, Any]) -> None:
-    for key in ("reason", "override_reason"):
+def check_event_safety(event: dict[str, Any]) -> None:
+    """Refuse to persist key-like strings in free-text audit fields.
+
+    Called by ``AuditLog.append`` *and* pre-flight by mutating registry
+    operations — an unsafe reason must fail before any disk write, not
+    after the artifact changed.
+    """
+    for key in ("reason", "override_reason", "description"):
         value = event.get(key)
-        if isinstance(value, str) and _KEY_LIKE_RE.search(value):
+        if isinstance(value, str) and looks_key_like(value):
             raise UnsafeAuditReason(
                 f"audit field '{key}' contains a key-like string — refusing to write"
             )
@@ -76,7 +89,7 @@ class AuditLog:
             )
         if "prevHash" in event or "hash" in event:
             raise ValueError("audit events may not carry prevHash/hash — they are computed")
-        _check_reason_safety(event)
+        check_event_safety(event)
         with self._lock:
             prev_hash = self._last_hash()
             line = {

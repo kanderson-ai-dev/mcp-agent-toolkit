@@ -26,7 +26,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from mcp_toolkit.prompts.audit import AuditLog
+from mcp_toolkit.prompts.audit import AuditLog, check_event_safety
 from mcp_toolkit.prompts.errors import (
     InvalidTransition,
     RegistryValidationError,
@@ -166,6 +166,9 @@ class PromptRegistry:
         model_hint: str | None = None,
     ) -> PromptArtifact:
         """Write ``vN+1.yaml`` with ``status=candidate`` and audit it."""
+        # Safety-check free text before any disk write — an audit
+        # rejection must never leave a mutated artifact behind.
+        check_event_safety({"description": description})
         with self._lock:
             versions = self._artifacts.setdefault(name, {})
             next_version = max(versions, default=0) + 1
@@ -201,6 +204,7 @@ class PromptRegistry:
         Promoting a version atomically rolls the previously promoted one
         back — the one-promoted-per-name invariant is never violated.
         """
+        check_event_safety({"reason": reason})
         with self._lock:
             artifact = self.get(name, version)
             allowed = ALLOWED_TRANSITIONS[artifact.status]
@@ -250,6 +254,7 @@ class PromptRegistry:
         ``promoted_override`` with a mandatory, secret-free reason."""
         if not reason.strip():
             raise ValueError("promote_override requires a non-empty reason")
+        check_event_safety({"override_reason": reason})
         updated = self.transition(name, version, "promoted", reason=reason)
         # transition() wrote a `promoted` event — replace semantics matter:
         # record the override explicitly so the audit shows it was a
@@ -270,6 +275,7 @@ class PromptRegistry:
         Requires a reason — a rollback without one is unauditable."""
         if not reason.strip():
             raise ValueError("rollback requires a non-empty reason")
+        check_event_safety({"reason": reason})
         with self._lock:
             target = self.get(name, to_version)
             if target.status in ("draft", "candidate"):

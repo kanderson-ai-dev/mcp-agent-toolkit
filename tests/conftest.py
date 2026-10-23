@@ -75,7 +75,22 @@ def _offline_env() -> Iterator[None]:
             os.environ[key] = value
 
 
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+def _e2e_enabled(config: pytest.Config) -> bool:
+    """E2E runs only when targeted explicitly (``pytest tests/e2e``) or
+    opted into — the sync Playwright driver keeps its greenlet loop
+    alive between tests, which breaks ``pytest-asyncio``'s runner for
+    every async test collected in the same session."""
+    if os.environ.get("RUN_E2E_TESTS") == "1":
+        return True
+    return any("e2e" in str(arg) for arg in config.args)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if not _e2e_enabled(config):
+        skip_e2e = pytest.mark.skip(reason="needs RUN_E2E_TESTS=1 or pytest tests/e2e")
+        for item in items:
+            if "e2e" in item.keywords:
+                item.add_marker(skip_e2e)
     if _live_enabled():
         return
     skip_live = pytest.mark.skip(reason="needs RUN_LIVE_TESTS=1")

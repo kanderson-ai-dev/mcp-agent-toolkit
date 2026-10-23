@@ -31,6 +31,7 @@ from mcp_toolkit.client.mcp_client import DiscoveredTool, ToolInvoker
 from mcp_toolkit.observability.metrics import Metrics
 from mcp_toolkit.prompts.loader import LoadedPrompt
 from mcp_toolkit.web import sse
+from mcp_toolkit.web.prompts_routes import PromptAPIDeps, create_prompt_router
 from mcp_toolkit.web.run_store import RunStore
 
 _BODY_LIMIT = 32 * 1024
@@ -53,6 +54,10 @@ class WebDeps:
     heartbeat_s: float = 15.0
     cors_origin: str | None = None
     static_dir: Path | None = None
+    # Resolves the prompt fresh per run — hot-swap: a promoted version
+    # takes effect on the next run while in-flight runs keep theirs.
+    prompt_provider: Callable[[], LoadedPrompt] | None = None
+    prompt_api: PromptAPIDeps | None = None
 
 
 def _deps(request: Request) -> WebDeps:
@@ -143,6 +148,14 @@ def create_app(
             },
         )
 
+    # Always mounted — deps are resolved per-request from app.state so
+    # the router also works when a lifespan installs them later.
+    def _prompt_api() -> PromptAPIDeps | None:
+        d = getattr(app.state, "deps", None)
+        return d.prompt_api if d is not None else None
+
+    app.include_router(create_prompt_router(_prompt_api))
+
     _mount_static(app, deps)
 
     return app
@@ -164,6 +177,7 @@ async def _event_stream(question: str, deps: WebDeps, request: Request) -> Async
 
     async def _run() -> None:
         try:
+            prompt = deps.prompt_provider() if deps.prompt_provider else deps.agent_prompt
             await run_agent(
                 question,
                 AgentLoopDeps(
@@ -172,7 +186,7 @@ async def _event_stream(question: str, deps: WebDeps, request: Request) -> Async
                     tools=deps.tools,
                     max_iterations=deps.max_iterations,
                     emit=queue.put_nowait,
-                    prompt=deps.agent_prompt,
+                    prompt=prompt,
                     metrics=deps.metrics,
                 ),
             )
