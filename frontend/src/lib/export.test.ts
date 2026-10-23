@@ -69,7 +69,7 @@ describe("runToJson", () => {
   it("emits friendly-labelled structured data", () => {
     const doc = JSON.parse(runToJson(RUN)) as {
       question: string;
-      steps: Array<Record<string, unknown>>;
+      steps: Record<string, unknown>[];
       answer?: string;
       promptVersion?: number;
     };
