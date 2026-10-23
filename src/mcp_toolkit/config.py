@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     langchain_project: str = "mcp-agent-toolkit-py"
 
     # ── Web console ───────────────────────────────────────────────────
+    web_host: str = "127.0.0.1"
+    """Bind address — loopback by default. ``0.0.0.0`` is needed inside a
+    container so the host can reach the published port; the console is
+    unauthenticated, so a non-loopback bind logs a loud warning."""
     web_port: int = Field(default=3000, ge=1, le=65535)
     web_cors_origin: str = "http://localhost:5173"
 

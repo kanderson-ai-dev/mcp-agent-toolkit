@@ -8,8 +8,11 @@ only intentionally-uncovered line — it is a process side effect.
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
+import sqlite3
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -19,12 +22,13 @@ from mcp_toolkit.client.mcp_client import McpAgentClient, server_env
 from mcp_toolkit.client.server_spawn import resolve_server_spawn
 from mcp_toolkit.prompts.loader import load_prompt
 from mcp_toolkit.prompts.registry import PromptRegistry
-from mcp_toolkit.web.__main__ import _run_ab, _utf8_streams, build_app
+from mcp_toolkit.web import __main__ as web_main
+from mcp_toolkit.web.__main__ import _run_ab, _seed_db_if_missing, _utf8_streams, build_app
 from mcp_toolkit.web.app import WebDeps
 from tests.helpers import copy_promoted_baseline, make_settings
 
 
-def _settings(tmp_path: Path):
+def _settings(tmp_path: Path, **overrides: Any):
     registry_root = copy_promoted_baseline(Path("prompts"), tmp_path / "prompts")
     sandbox = tmp_path / "sandbox"
     sandbox.mkdir()
@@ -43,6 +47,7 @@ def _settings(tmp_path: Path):
         # The dataset's burst row (ad-12) would exhaust the shared limit;
         # the limiter itself is covered elsewhere.
         rate_limit_per_minute=100000,
+        **overrides,
     )
 
 
@@ -103,6 +108,85 @@ async def test_run_ab_offline_smoke(tmp_path: Path) -> None:
 def test_utf8_streams_is_idempotent() -> None:
     _utf8_streams()
     _utf8_streams()
+
+
+ALL_INTERFACES = "0.0.0.0"  # noqa: S104 — a test value, not a real bind
+
+
+def test_web_host_defaults_to_loopback() -> None:
+    assert make_settings().web_host == "127.0.0.1"
+    assert make_settings(web_host="  ").web_host == "127.0.0.1"
+    assert make_settings(web_host=ALL_INTERFACES).web_host == ALL_INTERFACES
+
+
+def test_main_binds_the_configured_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(web_main, "load_env_file", lambda *a: None)
+    monkeypatch.setattr(web_main, "get_settings", lambda: make_settings(web_host=ALL_INTERFACES))
+    monkeypatch.setattr(web_main, "configure_logging", lambda *a: None)
+    monkeypatch.setattr(web_main, "build_app", lambda s: object())
+    monkeypatch.setattr(web_main.uvicorn, "run", lambda app, **kw: captured.update(kw))
+    web_main.main()
+    assert captured["host"] == ALL_INTERFACES
+    assert captured["port"] == 3000
+
+
+def test_main_warns_only_on_non_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    warnings: list[str] = []
+
+    class _Log:
+        def warning(self, event: str, **kw: Any) -> None:
+            warnings.append(event)
+
+    for host, expected in ((ALL_INTERFACES, 1), ("127.0.0.1", 0)):
+        warnings.clear()
+        monkeypatch.setattr(web_main, "load_env_file", lambda *a: None)
+        monkeypatch.setattr(web_main, "get_settings", lambda h=host: make_settings(web_host=h))
+        monkeypatch.setattr(web_main, "configure_logging", lambda *a: None)
+        monkeypatch.setattr(web_main, "get_logger", lambda *a: _Log())
+        monkeypatch.setattr(web_main, "build_app", lambda s: object())
+        monkeypatch.setattr(web_main.uvicorn, "run", lambda *a, **k: None)
+        web_main.main()
+        assert len(warnings) == expected
+
+
+def test_seed_db_if_missing_creates_and_preserves(tmp_path: Path) -> None:
+    db = tmp_path / "new.db"
+    assert _seed_db_if_missing(db) is True
+    conn = sqlite3.connect(db)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0] == 8
+    finally:
+        conn.close()
+    db.write_bytes(b"sentinel")
+    assert _seed_db_if_missing(db) is False
+    assert db.read_bytes() == b"sentinel"
+
+
+async def test_ab_runner_disabled_without_evaluation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deployments that do not ship the top-level ``evaluation/``
+    package keep every route except A/B, which answers 503."""
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name, *a, **k: None if name == "evaluation" else real_find_spec(name, *a, **k),
+    )
+    app = build_app(_settings(tmp_path, enable_prompt_admin=True))
+    async with app.router.lifespan_context(app):
+        deps: WebDeps = app.state.deps
+        assert deps.prompt_api is not None
+        assert deps.prompt_api.make_ab_runner is None
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            response = await c.post(
+                "/api/prompts/agent_system/ab-test", json={"candidate_version": 1}
+            )
+            assert response.status_code == 503
+            assert response.json()["code"] == "live_unavailable"
 
 
 async def test_run_ab_offline_refuses_live_without_key(tmp_path: Path) -> None:

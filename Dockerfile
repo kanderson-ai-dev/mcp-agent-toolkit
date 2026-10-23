@@ -1,5 +1,16 @@
 # syntax=docker/dockerfile:1
 
+# ── Frontend: build the React console ─────────────────────────────────
+FROM node:22-bookworm-slim AS frontend
+
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+# vite.config.ts embeds the dataset's uiExample questions at build time.
+COPY evaluation/dataset.json /build/evaluation/dataset.json
+RUN npm run build
+
 # ── Builder: resolve the lockfile and install into a venv ─────────────
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
@@ -14,11 +25,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
 
-# Then the project itself (package + runtime scripts + prompt root).
+# Then the project itself (package + runtime scripts + prompt root +
+# the evaluation package — the web adapter imports it for A/B runs and
+# /api/status reads its committed scorecard).
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ src/
 COPY scripts/ scripts/
 COPY prompts/ prompts/
+COPY evaluation/ evaluation/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
@@ -38,11 +52,15 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/src /app/src
 COPY --from=builder --chown=app:app /app/scripts /app/scripts
 COPY --from=builder --chown=app:app /app/prompts /app/prompts
+COPY --from=builder --chown=app:app /app/evaluation /app/evaluation
+COPY --from=frontend --chown=app:app /build/frontend/dist /app/frontend/dist
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     SANDBOX_ROOT=/data/sandbox \
-    DB_PATH=/data/demo.db
+    DB_PATH=/data/demo.db \
+    PROMPT_AUDIT_PATH=/data/prompt-registry/audit.jsonl \
+    PROMPT_AB_RESULTS_DIR=/data/prompt-registry/ab
 
 USER app
 

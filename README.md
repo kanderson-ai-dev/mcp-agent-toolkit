@@ -301,9 +301,14 @@ server, so any MCP client can drive it:
 ```bash
 docker build -t mcp-agent-toolkit .
 docker run --rm mcp-agent-toolkit                          # stdio MCP server, UID 10001
-docker run --rm -p 3000:3000 \
+docker run --rm -e WEB_HOST=0.0.0.0 -p 127.0.0.1:3000:3000 \
   mcp-agent-toolkit python -m mcp_toolkit.web              # console at localhost:3000
 ```
+
+The image ships the built console, `evaluation/` (scorecard + A/B gate)
+and the prompt registry; the web lifespan seeds the fixture DB into
+`/data` on first run. `docker compose up web` is the same thing wired
+for you — the published port stays loopback-only on the host.
 
 ## ⚙️ Environment Variables
 
@@ -326,6 +331,7 @@ docker run --rm -p 3000:3000 \
 | `RUN_BUDGET_USD` | — | Hard per-run cost cap |
 | `MCP_TRANSPORT` | `stdio` | `stdio` · `streamable-http` |
 | `MCP_HTTP_TOKEN` | — | Required on non-loopback HTTP binds |
+| `WEB_HOST` | `127.0.0.1` | Console bind; `0.0.0.0` inside containers |
 | `WEB_PORT` | `3000` | Console port |
 | `ENABLE_PROMPT_ADMIN` | off | Registry write endpoints |
 | `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing opt-in |

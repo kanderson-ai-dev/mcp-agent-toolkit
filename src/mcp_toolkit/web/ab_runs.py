@@ -17,9 +17,13 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from mcp_toolkit.prompts.ab_test import ABResult
+if TYPE_CHECKING:
+    # ``ab_test`` imports the top-level ``evaluation`` package, which
+    # deployments may not ship — everything here only duck-types the
+    # result, so the import is annotation-only.
+    from mcp_toolkit.prompts.ab_test import ABResult
 
 AB_RESULTS_DIR = Path("data/prompt-registry/ab")
 

@@ -124,7 +124,8 @@ jobs:
       - name: Boot the web adapter in the container
         run: |
           docker run -d --name app -p 8123:8123 \
-            -e LLM_PROVIDER=stub -e SEARCH_PROVIDER=none -e WEB_PORT=8123 \
+            -e LLM_PROVIDER=stub -e SEARCH_PROVIDER=none \
+            -e WEB_HOST=0.0.0.0 -e WEB_PORT=8123 \
             mcp-agent-toolkit python -m mcp_toolkit.web
           for i in $(seq 1 45); do
             if curl -fsS http://127.0.0.1:8123/api/health; then
@@ -133,6 +134,21 @@ jobs:
             [ "$i" = "45" ] && { docker logs app; exit 1; }
             sleep 1
           done
+
+      - name: Assert the API answers
+        run: |
+          curl -fsS http://127.0.0.1:8123/api/status | grep -q '"toolCount":4'
+          for tool in web_search db_query read_file write_file; do
+            curl -fsS http://127.0.0.1:8123/api/tools | grep -q "\"$tool\""
+          done
+
+      - name: Assert the built console is served
+        run: curl -fsS http://127.0.0.1:8123/ | grep -q '<div id="root">'
+
+      - name: Assert the evaluation package ships
+        run: |
+          docker exec app test -f /app/evaluation/scorecard.json
+          docker exec app test -f /app/evaluation/dataset.json
 
       - name: Assert the container runs as non-root
         run: docker exec app id -u | grep -q '^10001$'

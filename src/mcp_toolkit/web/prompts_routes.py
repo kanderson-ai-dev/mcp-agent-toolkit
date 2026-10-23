@@ -27,13 +27,12 @@ import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from mcp_toolkit.prompts.ab_test import ABResult
 from mcp_toolkit.prompts.audit import looks_key_like
 from mcp_toolkit.prompts.errors import (
     InvalidTransition,
@@ -51,6 +50,11 @@ from mcp_toolkit.web.ab_runs import (
     AbRunManager,
     latest_ab_result,
 )
+
+if TYPE_CHECKING:
+    # ``ab_test`` pulls in the top-level ``evaluation`` package — not
+    # every deployment ships it. Only annotations need the name.
+    from mcp_toolkit.prompts.ab_test import ABResult
 
 MAX_TEMPLATE_BYTES = 32_768
 # Candidate submissions are tighter than the artifact schema limit —
