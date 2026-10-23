@@ -233,6 +233,70 @@ def test_rollback_requires_reason_and_real_target(registry: PromptRegistry) -> N
         registry.rollback("agent_system", cand.version, reason="never promoted")
 
 
+def test_transition_cannot_orphan_the_promoted_version(registry: PromptRegistry) -> None:
+    """``transition(promoted → rolled_back)`` would leave zero promoted —
+    the name is unloadable on the next start. Only rollback() and a
+    competing promotion may move a version out of ``promoted``."""
+    promoted = registry.get_promoted("agent_system")
+    with pytest.raises(InvalidTransition, match="promoted"):
+        registry.transition("agent_system", promoted.version, "rolled_back", reason="x")
+    assert registry.get_promoted("agent_system").version == promoted.version
+    # Disk was never touched: a fresh registry loads the same state.
+    reloaded = PromptRegistry(registry.root, audit_path=registry.audit_log.path)
+    assert reloaded.get_promoted("agent_system").version == promoted.version
+
+
+def test_candidate_needs_an_existing_lineage(registry: PromptRegistry) -> None:
+    """A candidate-only line would leave zero promoted versions for that
+    name on the next load — create it by hand first instead."""
+    with pytest.raises(UnknownPromptVersion, match="unknown prompt"):
+        registry.create_candidate("typo_name", template="x", description="d", author="t")
+    assert "typo_name" not in registry._artifacts
+    assert not (registry.root / "typo_name").exists()
+    # The registry itself stays consistent and reloadable.
+    PromptRegistry(registry.root, audit_path=registry.audit_log.path)
+
+
+def test_failed_candidate_leaves_nothing_behind(registry: PromptRegistry) -> None:
+    """Schema rejection happens before any mutation — no version bump,
+    no file, no map entry."""
+    before = [(a.name, a.version, a.status) for a in registry.list()]
+    with pytest.raises(ValidationError):
+        registry.create_candidate(
+            "agent_system",
+            template="x" * 33_000,  # over the 32 000-char schema cap
+            description="d",
+            author="t",
+        )
+    assert [(a.name, a.version, a.status) for a in registry.list()] == before
+    assert not (registry.root / "agent_system" / "v2.yaml").exists()
+
+
+def test_failed_promotion_write_keeps_memory_consistent_with_disk(
+    registry: PromptRegistry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the candidate's write fails after the demotion write succeeded,
+    the in-memory map must not run ahead of the YAML on disk."""
+    cand = registry.create_candidate(
+        "agent_system", template=TEMPLATE_V2, description="d", author="t"
+    )
+    real_write = PromptRegistry._write
+    calls: list[int] = []
+
+    def flaky(self: PromptRegistry, artifact: PromptArtifact) -> None:
+        calls.append(artifact.version)
+        if len(calls) == 2:  # demotion written, promotion fails
+            raise OSError("simulated write failure")
+        real_write(self, artifact)
+
+    monkeypatch.setattr(PromptRegistry, "_write", flaky)
+    with pytest.raises(OSError, match="simulated"):
+        registry.promote("agent_system", cand.version, reason="r")
+    # Memory must not claim a state the disk does not have.
+    assert registry.get("agent_system", 1).status == "promoted"
+    assert registry.get("agent_system", cand.version).status == "candidate"
+
+
 def test_promote_override_requires_reason_and_audits(registry: PromptRegistry) -> None:
     cand = registry.create_candidate(
         "agent_system", template=TEMPLATE_V2, description="d", author="t"

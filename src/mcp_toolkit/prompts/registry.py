@@ -99,8 +99,14 @@ class PromptRegistry:
         for name, versions in self._artifacts.items():
             promoted = [a for a in versions.values() if a.status == "promoted"]
             if len(promoted) != 1:
+                hint = ""
+                if not promoted:
+                    hint = (
+                        " — fix by hand: set `status: promoted` in the "
+                        "YAML of the version that should be active"
+                    )
                 raise RegistryValidationError(
-                    f"{name}: expected exactly 1 promoted version, found {len(promoted)}"
+                    f"{name}: expected exactly 1 promoted version, found {len(promoted)}{hint}"
                 )
 
     # ── reads ───────────────────────────────────────────────────────
@@ -170,8 +176,15 @@ class PromptRegistry:
         # rejection must never leave a mutated artifact behind.
         check_event_safety({"description": description})
         with self._lock:
-            versions = self._artifacts.setdefault(name, {})
-            next_version = max(versions, default=0) + 1
+            if name not in self._artifacts:
+                # A candidate-only lineage violates the one-promoted
+                # invariant at the next load — it must never exist.
+                raise UnknownPromptVersion(
+                    f"{name}: unknown prompt — a candidate attaches to an existing lineage"
+                )
+            # Validate before mutating: a schema rejection leaves no map
+            # entry, no version bump and no file behind.
+            next_version = max(self._artifacts[name]) + 1
             artifact = PromptArtifact(
                 name=name,
                 version=next_version,
@@ -183,7 +196,7 @@ class PromptRegistry:
                 template=template,
             )
             self._write(artifact)
-            versions[next_version] = artifact
+            self._artifacts[name][next_version] = artifact
             self.audit_log.append(
                 {
                     "type": "candidate_created",
@@ -213,15 +226,30 @@ class PromptRegistry:
                     f"{name}@v{version}: {artifact.status} → {to_status} is not "
                     f"allowed (from {artifact.status}: {sorted(allowed)})"
                 )
+            if artifact.status == "promoted":
+                # The table lists promoted → rolled_back because that move
+                # exists *inside* rollback(); a bare transition that
+                # orphans the name's promoted version is refused.
+                raise InvalidTransition(
+                    f"{name}@v{version}: the promoted version cannot leave "
+                    "'promoted' directly — promote another version or use "
+                    "rollback()"
+                )
             demoted: PromptArtifact | None = None
             if to_status == "promoted":
                 current = self.get_promoted(name)
                 if current.version != version:
                     demoted = current.model_copy(update={"status": "rolled_back"})
-                    self._write(demoted)
-                    self._artifacts[name][demoted.version] = demoted
             updated = artifact.model_copy(update={"status": to_status})
+            # Disk first, memory last: a failed write never leaves the
+            # in-memory map ahead of the YAML. A crash between the two
+            # writes leaves zero promoted on disk and the next load fails
+            # loudly — that window is inherent to two files, by design.
+            if demoted is not None:
+                self._write(demoted)
             self._write(updated)
+            if demoted is not None:
+                self._artifacts[name][demoted.version] = demoted
             self._artifacts[name][version] = updated
             if to_status == "promoted":
                 self.audit_log.append(
@@ -287,10 +315,12 @@ class PromptRegistry:
             if current.version == to_version:
                 return target
             demoted = current.model_copy(update={"status": "rolled_back"})
-            self._write(demoted)
-            self._artifacts[name][demoted.version] = demoted
             restored = target.model_copy(update={"status": "promoted"})
+            # Same disk-first ordering as transition(): a failed write
+            # never leaves memory ahead of disk.
+            self._write(demoted)
             self._write(restored)
+            self._artifacts[name][demoted.version] = demoted
             self._artifacts[name][to_version] = restored
             self.audit_log.append(
                 {

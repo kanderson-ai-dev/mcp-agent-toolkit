@@ -10,15 +10,16 @@ recorded in a hash-chained audit log.
 
 ```
 prompts/
-  agent_system/
-    v1.yaml          # status: promoted
-    v2.yaml          # status: candidate | rolled_back | draft
-  judge_rubric/
-    v1.yaml
+  agent_system/      # v1.yaml, v2.yaml, … — one per version
+  judge_rubric/      # same layout
 data/prompt-registry/
   audit.jsonl        # append-only, hash-chained audit log
   ab/                # persisted A/B results (promote-time evidence)
 ```
+
+Each name keeps exactly **one** `promoted` version at all times; the
+`status:` field in each YAML says which (see the `Lifecycle` section —
+`git ls-files prompts` shows the current set).
 
 Each artifact is YAML with `extra="forbid"` validation:
 `name`, `version`, `status`, `author`, `created_at`, `description`,
@@ -31,7 +32,12 @@ draft → candidate → promoted → rolled_back → candidate → …
 ```
 
 Exactly **one** `promoted` version per name at all times — promoting a
-candidate atomically rolls the incumbent back to `rolled_back`.
+candidate atomically rolls the incumbent back to `rolled_back`. A
+`promoted` version can never be moved out directly: it only leaves via
+a newer promotion (demote-then-promote inside one lock) or an explicit
+`rollback` (which demotes the incumbent and promotes an older version).
+Zero promoted versions is a load-time error, not a state the API can
+reach.
 
 ## Runtime selection
 
@@ -123,16 +129,26 @@ never executed.
 JSON. Any edit or deletion breaks the chain; `verify_chain()` (and
 `GET /api/prompts/audit`, `… audit`) pinpoints the first tampered line.
 
-## Current `agent_system` lineage
+## Current lineage
+
+`agent_system`:
 
 | Version | Status | Outcome |
 |---|---|---|
 | v1 | rolled_back | Original prompt migrated from code; superseded by v3 |
 | v2 | candidate | **Failed the live gate** — grounding regressed 3.71 → 3.33. Kept as a candidate, never promoted |
-| v3 | promoted | Live A/B vs v1: grounding +0.21, tool usage +0.13, no regressions, adversarial 13/13 |
+| v3 | rolled_back | Beat v1 live (grounding +0.21, tool usage +0.13, adversarial 13/13); later superseded by v4 |
+| v4 | promoted | Live A/B vs v3 under `judge_rubric` v2 — gate passed |
 
-Both runs were `mode: "live"` with real agent and judge calls; evidence
-with per-question detail lives in
-`data/prompt-registry/ab/agent_system-b1-c2-84bf750e-*.json` (v2, gate
-failed) and `…-b1-c3-0f17bcc5-*.json` (v3, gate passed). The v2 run is
-kept deliberately — a failed gate is evidence, not something to hide.
+`judge_rubric`:
+
+| Version | Status | Outcome |
+|---|---|---|
+| v1 | rolled_back | Clean refusals scored grounding = 1 despite nothing to ground |
+| v2 | promoted | Rubric fix — promoted via an audited `promoted_override` |
+
+All runs were `mode: "live"` with real agent and judge calls; evidence
+with per-question detail lives in `data/prompt-registry/ab/` (e.g.
+`agent_system-b1-c2-84bf750e-*.json` for the failed v2 gate). The v2 run
+is kept deliberately — a failed gate is evidence, not something to hide.
+The full history is in `data/prompt-registry/audit.jsonl`.
