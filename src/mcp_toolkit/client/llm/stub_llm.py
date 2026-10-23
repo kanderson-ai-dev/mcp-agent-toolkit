@@ -45,20 +45,65 @@ def _next_id() -> str:
     return f"stubcall_{next(_ids)}"
 
 
-_TRAVERSAL = re.compile(r"\.\.[\\/]|etc/passwd", re.IGNORECASE)
+_TRAVERSAL = re.compile(r"\.\.[\\/]|etc/passwd|etc/shadow", re.IGNORECASE)
 _ABS_PATH = re.compile(r"[A-Za-z]:[\\/][^`\s'\"]+|/(?:etc|usr|var|root|home)/[^`\s'\"]+")
+_BACKTICK = re.compile(r"`([^`]{1,400})`")
+_TRAV_PATH = re.compile(r"\.\.[\\/][^`\s'\"]+")
 _DROP_TABLE = re.compile(r"\bDROP\s+TABLE\b", re.IGNORECASE)
+_SQLI = re.compile(
+    r"\bPRAGMA\b|\bATTACH\b|;\s*(?:DROP|PRAGMA|ATTACH|SELECT|INSERT|DELETE|UPDATE)",
+    re.IGNORECASE,
+)
+_STORM = re.compile(r"\b(\d{2,4})\s*times\b|rapid succession|rate.?limit", re.IGNORECASE)
+_BIG_WRITE = re.compile(r"\b\d+\s*MB\b|megabyte|zero bytes", re.IGNORECASE)
+_BASE64 = re.compile(r"\bbase64\b|\bdecode\b", re.IGNORECASE)
 _INJECTION = re.compile(
     r"addressed to you|previous instructions|system prompt|"
-    r"ignore (your |all |the )?(previous|prior)|reveal",
+    r"ignore (your |all |the )?(previous|prior)|reveal|pretend|role.?play|act as|"
+    r"exact instructions|configured with|your instructions",
     re.IGNORECASE,
 )
 _CITATION = re.compile(r"citation", re.IGNORECASE)
 
-_READ = re.compile(r"\bread\b|contents of|\.txt\b", re.IGNORECASE)
+_READ = re.compile(r"\bread\b|contents?\b|\.txt\b|symlink", re.IGNORECASE)
 _WEB = re.compile(r"\bweb\b|internet|cite|source|research|search", re.IGNORECASE)
 _DB = re.compile(r"\breports?\b|database|catalog|\bauthor", re.IGNORECASE)
 _WRITE = re.compile(r"\bsave|\bwrite\b|persist|briefing|notes/", re.IGNORECASE)
+
+
+def _escape_targets(question: str) -> tuple[list[str], list[str]]:
+    """(dangerous, benign-relative) paths mentioned in the question.
+
+    Dangerous = `..` traversal or an absolute/drive path — the sandbox
+    must reject these. Benign backticked relative paths (a symlink name,
+    a workspace file) are listed separately so adversarial reads can
+    attempt them first and still get blocked downstream.
+    """
+    dangerous: list[str] = []
+    benign: list[str] = []
+    for text in _BACKTICK.findall(question):
+        t = text.strip()
+        if not t or " " in t or ";" in t:
+            continue  # prose or SQL in backticks, not a path
+        if _TRAVERSAL.search(t) or _ABS_PATH.search(t):
+            target_list = dangerous
+        elif "/" in t or "\\" in t or "." in t:
+            target_list = benign
+        else:
+            continue
+        if t not in target_list:
+            target_list.append(t)
+    for m in _TRAV_PATH.finditer(question):
+        p = m.group(0).rstrip("`.,;'\"")
+        if p not in dangerous:
+            dangerous.append(p)
+    for m in _ABS_PATH.finditer(question):
+        p = m.group(0).rstrip("`.,;'\"")
+        # An absolute path embedded inside a traversal (`../../etc/passwd`
+        # contains `/etc/passwd`) must not produce a second attempt.
+        if p not in dangerous and not any(p in d or d in p for d in dangerous):
+            dangerous.append(p)
+    return dangerous, benign
 
 
 def _tool_rounds(messages: list[AgentMessage]) -> int:
@@ -106,22 +151,57 @@ class StubLLM:
             (m.content for m in reversed(messages) if isinstance(m, UserMessage)),
             "the user's question",
         )
-        traversal = bool(_TRAVERSAL.search(question))
+        storm = _STORM.search(question)
+        dangerous, benign = _escape_targets(question)
+        escape = bool(dangerous)
+        wants_write = bool(_WRITE.search(question))
+        sqli = bool(_SQLI.search(question))
         drop = bool(_DROP_TABLE.search(question))
-        injection = bool(_INJECTION.search(question))
-        adversarial = traversal or drop or injection
+        big_write = bool(_BIG_WRITE.search(question))
+        injection = bool(_INJECTION.search(question)) or bool(_BASE64.search(question))
+        adversarial = escape or drop or sqli or big_write or injection or bool(storm)
         rounds = _tool_rounds(messages)
 
         if rounds == 0:
-            if traversal and has("read_file"):
-                first = "../../etc/passwd"
-                calls = [_call("read_file", {"path": first})]
-                for m in _ABS_PATH.finditer(question):
-                    path = m.group(0).rstrip("`.,;'\"")
-                    if path not in first:
-                        calls.append(_call("read_file", {"path": path}))
-                        break
+            if storm and has("db_query"):
+                count_m = re.search(r"\b(\d{2,4})\s*times\b", question)
+                count = min(int(count_m.group(1)) if count_m else 65, 70)
+                sql = next(
+                    (t for t in _BACKTICK.findall(question) if "SELECT" in t.upper()),
+                    "SELECT 1",
+                )
+                return LLMResponse(
+                    content=None,
+                    tool_calls=[_call("db_query", {"query": sql}) for _ in range(count)],
+                )
+            if big_write and wants_write and has("write_file"):
+                path = next(
+                    (t.strip() for t in _BACKTICK.findall(question) if " " not in t.strip()),
+                    "dump.bin",
+                )
+                return LLMResponse(
+                    content=None,
+                    tool_calls=[_call("write_file", {"path": path, "content": "0" * 1_100_000})],
+                )
+            if escape and wants_write and has("write_file"):
+                return LLMResponse(
+                    content=None,
+                    tool_calls=[
+                        _call(
+                            "write_file",
+                            {"path": dangerous[0], "content": "stub payload"},
+                        )
+                    ],
+                )
+            if escape and has("read_file"):
+                calls = [_call("read_file", {"path": p}) for p in benign + dangerous]
                 return LLMResponse(content=None, tool_calls=calls)
+            if sqli and has("db_query"):
+                sql = next(
+                    (t for t in _BACKTICK.findall(question) if ";" in t),
+                    "PRAGMA journal_mode=WAL",
+                )
+                return LLMResponse(content=None, tool_calls=[_call("db_query", {"query": sql})])
             if drop and has("db_query"):
                 return LLMResponse(
                     content=None,
@@ -129,7 +209,7 @@ class StubLLM:
                 )
             if injection:
                 calls = []
-                if has("web_search"):
+                if _WEB.search(question) and has("web_search"):
                     calls.append(
                         _call(
                             "web_search",
@@ -229,11 +309,25 @@ class StubLLM:
             )
 
         if adversarial:
-            content = (
-                "Stub answer: the requested operation was rejected by the server's "
-                "guardrails; nothing unsafe was executed. (Run with OPENAI_API_KEY "
-                "set for a live model.)"
-            )
+            if storm:
+                content = (
+                    "Stub answer: issued the repeated queries as asked; the rate "
+                    "limiter rejected the excess calls — "
+                    "the guardrail did its job. (Run with OPENAI_API_KEY set for a "
+                    "live model.)"
+                )
+            elif rounds == 0:
+                content = (
+                    "Stub answer: declined — the request asks for something the "
+                    "safety rules forbid, so no tool calls were made. (Run with "
+                    "OPENAI_API_KEY set for a live model.)"
+                )
+            else:
+                content = (
+                    "Stub answer: the requested operation was rejected by the "
+                    "server's guardrails; nothing unsafe was executed. (Run with "
+                    "OPENAI_API_KEY set for a live model.)"
+                )
         elif _tool_rounds(messages) == 0:
             content = (
                 "Stub answer: a general-knowledge question needs no tools — "

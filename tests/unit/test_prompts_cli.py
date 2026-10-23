@@ -5,7 +5,6 @@ audit. The live ``ab`` path is covered indirectly by ``test_ab_test``
 from __future__ import annotations
 
 import json
-import shutil
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
@@ -15,11 +14,12 @@ import scripts.prompts_cli as cli
 
 from mcp_toolkit.prompts.errors import InvalidTransition
 from mcp_toolkit.prompts.registry import PromptRegistry
+from tests.helpers import copy_promoted_baseline
 
 
 def _registry(tmp_path: Path) -> PromptRegistry:
-    root = tmp_path / "prompts"
-    shutil.copytree(Path("prompts"), root)
+    """A copy of the real registry pinned to the promoted v1 baseline."""
+    root = copy_promoted_baseline(Path("prompts"), tmp_path / "prompts")
     return PromptRegistry(root, audit_path=tmp_path / "audit.jsonl")
 
 

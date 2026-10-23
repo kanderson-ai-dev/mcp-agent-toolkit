@@ -26,6 +26,7 @@ test-results/
 .env.*
 !.env.example
 data/*.db*
+data/*.log
 data/sandbox/*
 !data/sandbox/.gitkeep
 !data/sandbox/welcome.txt

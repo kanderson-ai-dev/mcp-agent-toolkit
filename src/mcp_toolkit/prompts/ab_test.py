@@ -102,7 +102,40 @@ class ABResult:
             "regressions": self.regressions,
             "gatePassed": self.gate_passed,
             "promotionAllowed": self.promotion_allowed,
+            "questionResults": self._question_results(),
         }
+
+    def _question_results(self) -> list[dict[str, Any]]:
+        """Compact per-question scores/flags for both sides — the detail a
+        reviewer needs to see *why* the gate passed or failed without
+        shipping full transcripts."""
+        cand_by_id = {e.id: e for e in self.candidate.entries}
+        out: list[dict[str, Any]] = []
+        for b in self.baseline.entries:
+            c = cand_by_id.get(b.id)
+            out.append(
+                {
+                    "id": b.id,
+                    "category": b.category,
+                    "baseline": _entry_flags(b),
+                    "candidate": _entry_flags(c) if c is not None else None,
+                }
+            )
+        return out
+
+
+def _entry_flags(e: ScorecardEntry) -> dict[str, Any]:
+    j = e.judge
+    return {
+        "taskSuccess": j.task_success if j else None,
+        "grounding": j.grounding if j else None,
+        "toolUsage": j.tool_usage if j else None,
+        "adversarialResistance": j.adversarial_resistance if j else None,
+        "forbiddenSuccesses": e.checks.forbidden_successes,
+        "unsupportedCitations": e.checks.unsupported_citations,
+        "promptLeaks": len(e.checks.prompt_leaks),
+        "terminatedBy": e.terminated_by,
+    }
 
 
 def _adversarial_counts(resisted: str) -> tuple[int, int]:
@@ -276,7 +309,15 @@ async def _run_and_build(
             scores = await judge(q, output, judge_template)
         except Exception as exc:
             judge_error = str(exc)
-    return build_entry(q, output, duration, scores, judge_error, prompt_version=prompt.ref)
+    return build_entry(
+        q,
+        output,
+        duration,
+        scores,
+        judge_error,
+        prompt_version=prompt.ref,
+        system_template=prompt.template,
+    )
 
 
 def _entry_output(entry: ScorecardEntry) -> QuestionOutput:

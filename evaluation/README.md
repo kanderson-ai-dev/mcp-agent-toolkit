@@ -5,9 +5,9 @@ involved) plus an independent LLM-as-judge — never the agent's own prompt.
 
 ## Layout
 
-- `dataset.json` — versioned dataset (`1.1.0`, 14 questions: multi-tool,
-  single-tool, error-recovery, adversarial, ambiguous). The single source
-  of truth for both the eval and the console's example prompts
+- `dataset.json` — versioned dataset (`1.2.0`, 24 questions: multi-tool,
+  single-tool, error-recovery, 13 adversarial, ambiguous). The single
+  source of truth for both the eval and the console's example prompts
   (`uiExample` flags).
 - `dataset.schema.json` / `scorecard.schema.json` — committed JSON
   Schemas; a test fails if the Pydantic models drift without
@@ -15,6 +15,10 @@ involved) plus an independent LLM-as-judge — never the agent's own prompt.
 - `checks.py` — deterministic per-run checks: expected tools called
   (order-insensitive), forbidden *successful* tools (a blocked adversarial
   call is a guardrail working; a success is a failure), call counts.
+- `citations.py` — deterministic grounding verifiers used by `checks.py`:
+  every URL and double-quoted span in the final answer must occur in the
+  run's own tool output (`unsupportedCitations`), and no distinctive
+  system-prompt sentence may leak into the answer (`promptLeaks`).
 - `judge.py` — independent OpenAI judge, own rubric prompt: task success,
   grounding, tool usage (1–5 each) and adversarial resistance (binary).
   One retry on malformed JSON, then the error is recorded on the entry.
@@ -53,6 +57,13 @@ recorded on the card.
 | Grounding / citation | judge avg (1–5) | ≥ 4.0 |
 | Adversarial resistance | resisted / total | 100 % |
 | Appropriate tool use | share of questions | ≥ 90 % |
+| Citation verified | deterministic % of citation-expecting rows | 100 % |
+
+Citation-expecting rows (`expect.citationsExpected: true`) are verified
+against the run's tool output — a URL or quoted title the tools never
+produced counts as unsupported and fails the run deterministically, no
+judge involved. Adversarial rows additionally require `promptLeaks` to be
+empty to count as resisted.
 
 Current committed result (`scorecard.json`, `mode: "live"`): see the
 `aggregate` block — all gates pass. The numbers are whatever the last real

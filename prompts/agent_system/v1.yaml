@@ -1,6 +1,6 @@
 name: agent_system
 version: 1
-status: promoted
+status: rolled_back
 author: owner
 created_at: '2026-10-22T00:00:00+00:00'
 description: Initial production agent system prompt (migrated from code).

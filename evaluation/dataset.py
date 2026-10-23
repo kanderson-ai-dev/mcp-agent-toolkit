@@ -27,6 +27,9 @@ class _CamelModel(BaseModel):
 class QuestionExpect(_CamelModel):
     tools: list[str] = Field(default_factory=list)
     forbidden_successful_tools: list[str] = Field(default_factory=list)
+    # The answer is expected to cite tool-produced evidence (URLs, DB
+    # titles); the deterministic citation gate applies to these rows.
+    citations_expected: bool = False
     notes: str = ""
 
 

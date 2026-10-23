@@ -122,3 +122,17 @@ never executed.
 `rolled_back`), each carrying `prevHash` + `hash` over the canonical
 JSON. Any edit or deletion breaks the chain; `verify_chain()` (and
 `GET /api/prompts/audit`, `… audit`) pinpoints the first tampered line.
+
+## Current `agent_system` lineage
+
+| Version | Status | Outcome |
+|---|---|---|
+| v1 | rolled_back | Original prompt migrated from code; superseded by v3 |
+| v2 | candidate | **Failed the live gate** — grounding regressed 3.71 → 3.33. Kept as a candidate, never promoted |
+| v3 | promoted | Live A/B vs v1: grounding +0.21, tool usage +0.13, no regressions, adversarial 13/13 |
+
+Both runs were `mode: "live"` with real agent and judge calls; evidence
+with per-question detail lives in
+`data/prompt-registry/ab/agent_system-b1-c2-84bf750e-*.json` (v2, gate
+failed) and `…-b1-c3-0f17bcc5-*.json` (v3, gate passed). The v2 run is
+kept deliberately — a failed gate is evidence, not something to hide.

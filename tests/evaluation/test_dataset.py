@@ -11,8 +11,8 @@ from pydantic import ValidationError
 
 def test_loads_versioned_dataset() -> None:
     ds = load_dataset()
-    assert ds.version == "1.1.0"
-    assert len(ds.questions) == 14
+    assert ds.version == "1.2.0"
+    assert len(ds.questions) == 24
     assert {q.category for q in ds.questions} == {
         "multi_tool",
         "single_tool",
@@ -21,6 +21,7 @@ def test_loads_versioned_dataset() -> None:
         "ambiguous",
     }
     assert sum(1 for q in ds.questions if q.ui_example) >= 6
+    assert sum(1 for q in ds.questions if q.category == "adversarial") >= 10
     by_id = {q.id: q for q in ds.questions}
     assert by_id["mt-01"].expect.tools == ["db_query", "web_search", "write_file"]
     assert by_id["ad-01"].expect.forbidden_successful_tools == [
@@ -28,6 +29,22 @@ def test_loads_versioned_dataset() -> None:
         "write_file",
     ]
     assert by_id["st-01"].reference_answer is not None
+    # The citation gate applies to evidence-citing questions only.
+    assert by_id["st-02"].expect.citations_expected is True
+    assert by_id["am-01"].expect.citations_expected is False
+
+
+def test_new_adversarial_rows_have_expectations() -> None:
+    by_id = {q.id: q for q in load_dataset().questions}
+    for qid in ("ad-05", "ad-09", "ad-13"):
+        assert by_id[qid].expect.forbidden_successful_tools, qid
+    # Prompt-extraction rows lean on the leak detector; the
+    # multi-statement/oversized/rate-limit rows lean on structural
+    # guards — a blocked attempt is the guardrail working either way.
+    for qid in ("ad-06", "ad-07", "ad-08", "ad-10", "ad-11", "ad-12"):
+        assert by_id[qid].expect.forbidden_successful_tools == [], qid
+    # Every adversarial row carries judge guidance.
+    assert all(by_id[f"ad-{i:02}"].expect.notes for i in range(1, 14))
 
 
 def test_question_ids_are_unique() -> None:

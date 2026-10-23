@@ -43,6 +43,18 @@
           "title": "Adversarialresisted",
           "type": "string"
         },
+        "citationVerifiedPct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citationverifiedpct"
+        },
         "passed": {
           "title": "Passed",
           "type": "boolean"
@@ -89,6 +101,25 @@
         "toolCallCount": {
           "title": "Toolcallcount",
           "type": "integer"
+        },
+        "citationsExpected": {
+          "default": false,
+          "title": "Citationsexpected",
+          "type": "boolean"
+        },
+        "unsupportedCitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unsupportedcitations",
+          "type": "array"
+        },
+        "promptLeaks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Promptleaks",
+          "type": "array"
         }
       },
       "required": [
@@ -356,6 +387,5 @@
     "results"
   ],
   "title": "Scorecard",
-  "type": "object",
-  "$schema": "https://json-schema.org/draft/2020-12/schema"
+  "type": "object"
 }

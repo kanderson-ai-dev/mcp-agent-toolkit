@@ -8,7 +8,6 @@ teardown kills the process tree.
 from __future__ import annotations
 
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -19,6 +18,8 @@ from typing import Any
 
 import httpx
 import pytest
+
+from tests.helpers import copy_promoted_baseline
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "frontend"
@@ -94,6 +95,11 @@ def _boot_server(log_name: str, extra_env: dict[str, str]) -> Iterator[str]:
             "WEB_PORT": str(port),
             "METRICS_PORT": "",
             "LANGCHAIN_TRACING_V2": "false",
+            # One server session is shared by the whole suite; the
+            # ad-12 burst alone would exhaust the default limit and turn
+            # later guardrail rejections into rate_limited noise. The
+            # limiter itself is covered by unit/integration tests.
+            "RATE_LIMIT_PER_MINUTE": "100000",
         }
     )
     env.update(extra_env)
@@ -127,7 +133,9 @@ def admin_console_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]
     (candidates, A/B runs, promote, rollback) must never touch the real
     ``prompts/`` tree or the real audit log."""
     tmp = tmp_path_factory.mktemp("registry-e2e")
-    shutil.copytree(ROOT / "prompts", tmp / "prompts")
+    # Pin to the promoted v1 baseline — real later candidates (v2.yaml, …)
+    # must not shift the versions this suite creates through the UI.
+    copy_promoted_baseline(ROOT / "prompts", tmp / "prompts")
     yield from _boot_server(
         "console-server-admin.log",
         {

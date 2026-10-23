@@ -263,8 +263,12 @@ def test_committed_v1_artifacts_match_legacy_constants() -> None:
     for name in ("agent_system", "judge_rubric"):
         expected = (FIXTURES / f"{name}_v1.txt").read_text(encoding="utf-8")
         artifact = registry.get(name, 1)
-        assert artifact.status == "promoted"
+        # v1 may be rolled_back after a later real promotion — what is
+        # pinned is its *content* and that the name still has exactly one
+        # promoted version, not v1's own lifecycle state.
+        assert artifact.status in {"promoted", "rolled_back"}
         assert artifact.template == expected, f"{name} v1 drifted from the legacy constant"
+        assert sum(1 for v in registry.list(name) if v.status == "promoted") == 1
 
 
 def test_artifact_sha256_is_template_fingerprint(registry: PromptRegistry) -> None:

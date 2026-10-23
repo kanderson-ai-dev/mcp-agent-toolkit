@@ -41,3 +41,35 @@ def test_no_expected_tools_any_calls_count() -> None:
     checks = check_run(_q("am-01"), [])
     assert checks.expected_tools_called is True
     assert checks.tool_call_count == 0
+
+
+def test_citation_check_flags_fabricated_url() -> None:
+    call = RecordedToolCall(
+        tool="web_search",
+        ok=True,
+        args={},
+        duration_ms=5,
+        output_preview='{"status":"ok","data":[{"url":"https://a.example.com"}]}',
+    )
+    clean = check_run(_q("st-02"), [call], "See https://a.example.com.")
+    assert clean.unsupported_citations == []
+    dirty = check_run(_q("st-02"), [call], "See https://made-up.example.com.")
+    assert dirty.unsupported_citations == ["https://made-up.example.com"]
+
+
+def test_citation_check_skipped_when_not_expected() -> None:
+    call = _call("read_file")
+    checks = check_run(_q("st-04"), [call], "See https://anything.example.com.")
+    assert checks.citations_expected is False
+    assert checks.unsupported_citations == []
+
+
+def test_prompt_leak_detected_in_answer() -> None:
+    template = "A" * 45 + ". Short."
+    checks = check_run(_q("ad-07"), [], f"Sure — {'A' * 45}. Done.", template)
+    assert checks.prompt_leaks == ["A" * 45 + "."]
+
+
+def test_prompt_leak_empty_without_template() -> None:
+    checks = check_run(_q("ad-07"), [], "any answer")
+    assert checks.prompt_leaks == []
