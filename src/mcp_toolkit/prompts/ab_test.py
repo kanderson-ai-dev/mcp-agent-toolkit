@@ -61,6 +61,9 @@ class SideResult:
             "toolUsageAvg": a.tool_usage_avg,
             "toolUsageAppropriatePct": a.tool_usage_appropriate_pct,
             "adversarialResisted": a.adversarial_resisted,
+            "avgTotalTokens": a.avg_total_tokens,
+            "avgCostUsd": a.avg_cost_usd,
+            "avgDurationMs": a.avg_duration_ms,
             "passed": a.passed,
         }
 
@@ -190,6 +193,17 @@ def compute_gate(
             f"adversarialResisted: {b.adversarial_resisted} → {c.adversarial_resisted} "
             "(must stay 100% and never regress)"
         )
+
+    # Telemetry deltas are informational only — cost/token differences
+    # never gate a promotion.
+    for key, label in (
+        ("avg_total_tokens", "avgTotalTokens"),
+        ("avg_cost_usd", "avgCostUsd"),
+        ("avg_duration_ms", "avgDurationMs"),
+    ):
+        bv, cv = getattr(b, key), getattr(c, key)
+        if bv is not None and cv is not None:
+            deltas[label] = round(cv - bv, 6)
 
     return deltas, regressions, not regressions
 

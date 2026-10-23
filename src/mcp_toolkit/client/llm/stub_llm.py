@@ -28,11 +28,13 @@ from __future__ import annotations
 import itertools
 import json
 import re
+from collections.abc import Sequence
 
 from mcp_toolkit.client.llm.types import (
     AgentMessage,
     LLMResponse,
     OpenAIToolDef,
+    TokenUsage,
     ToolCallDef,
     ToolMessage,
     UserMessage,
@@ -122,6 +124,32 @@ def _call(name: str, args: dict[str, object]) -> ToolCallDef:
     return ToolCallDef(id=_next_id(), name=name, arguments=json.dumps(args))
 
 
+def _fake_usage(
+    messages: list[AgentMessage], content: str | None, calls: Sequence[ToolCallDef]
+) -> TokenUsage:
+    """Deterministic stand-in usage — derived from message sizes so runs
+    are reproducible. These are **fabricated** counts (the stub never
+    calls a model); the ``stub`` model has no price entry, so the wire
+    ``costUsd`` for stub runs is always ``null``."""
+    prompt_chars = sum(
+        len(m.content or "") + sum(len(c.arguments) for c in getattr(m, "tool_calls", ()))
+        for m in messages
+    )
+    completion_chars = len(content or "") + sum(len(c.arguments) for c in calls)
+    return TokenUsage(
+        prompt_tokens=max(1, prompt_chars // 4),
+        completion_tokens=max(1, completion_chars // 4),
+    )
+
+
+def _resp(
+    messages: list[AgentMessage], content: str | None, calls: Sequence[ToolCallDef]
+) -> LLMResponse:
+    return LLMResponse(
+        content=content, tool_calls=calls, usage=_fake_usage(messages, content, calls)
+    )
+
+
 def _build_stub_report(messages: list[AgentMessage]) -> str:
     collected = "\n".join(
         f"## {m.name}\n\n{m.content[:800]}\n" for m in messages if isinstance(m, ToolMessage)
@@ -140,6 +168,8 @@ def _build_stub_report(messages: list[AgentMessage]) -> str:
 
 class StubLLM:
     name = "stub"
+    model = "stub"
+    """Unpriced by design — fabricated usage must never show a real cost."""
 
     async def complete(
         self, messages: list[AgentMessage], tools: list[OpenAIToolDef]
@@ -170,23 +200,24 @@ class StubLLM:
                     (t for t in _BACKTICK.findall(question) if "SELECT" in t.upper()),
                     "SELECT 1",
                 )
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[_call("db_query", {"query": sql}) for _ in range(count)],
+                return _resp(
+                    messages, None, [_call("db_query", {"query": sql}) for _ in range(count)]
                 )
             if big_write and wants_write and has("write_file"):
                 path = next(
                     (t.strip() for t in _BACKTICK.findall(question) if " " not in t.strip()),
                     "dump.bin",
                 )
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[_call("write_file", {"path": path, "content": "0" * 1_100_000})],
+                return _resp(
+                    messages,
+                    None,
+                    [_call("write_file", {"path": path, "content": "0" * 1_100_000})],
                 )
             if escape and wants_write and has("write_file"):
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[
+                return _resp(
+                    messages,
+                    None,
+                    [
                         _call(
                             "write_file",
                             {"path": dangerous[0], "content": "stub payload"},
@@ -195,18 +226,15 @@ class StubLLM:
                 )
             if escape and has("read_file"):
                 calls = [_call("read_file", {"path": p}) for p in benign + dangerous]
-                return LLMResponse(content=None, tool_calls=calls)
+                return _resp(messages, None, calls)
             if sqli and has("db_query"):
                 sql = next(
                     (t for t in _BACKTICK.findall(question) if ";" in t),
                     "PRAGMA journal_mode=WAL",
                 )
-                return LLMResponse(content=None, tool_calls=[_call("db_query", {"query": sql})])
+                return _resp(messages, None, [_call("db_query", {"query": sql})])
             if drop and has("db_query"):
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[_call("db_query", {"query": "DROP TABLE reports"})],
-                )
+                return _resp(messages, None, [_call("db_query", {"query": "DROP TABLE reports"})])
             if injection:
                 calls = []
                 if _WEB.search(question) and has("web_search"):
@@ -217,11 +245,12 @@ class StubLLM:
                         )
                     )
                 if calls:
-                    return LLMResponse(content=None, tool_calls=calls)
+                    return _resp(messages, None, calls)
             elif _CITATION.search(question) and has("db_query"):
-                return LLMResponse(
-                    content=None,
-                    tool_calls=[
+                return _resp(
+                    messages,
+                    None,
+                    [
                         _call(
                             "db_query",
                             {
@@ -254,11 +283,12 @@ class StubLLM:
                         )
                     )
                 if calls:
-                    return LLMResponse(content=None, tool_calls=calls)
+                    return _resp(messages, None, calls)
                 if _WRITE.search(question) and has("write_file"):
-                    return LLMResponse(
-                        content=None,
-                        tool_calls=[
+                    return _resp(
+                        messages,
+                        None,
+                        [
                             _call(
                                 "write_file",
                                 {
@@ -275,9 +305,10 @@ class StubLLM:
             and _tool_calls_by(messages, "db_query") == 1
             and has("db_query")
         ):
-            return LLMResponse(
-                content=None,
-                tool_calls=[
+            return _resp(
+                messages,
+                None,
+                [
                     _call(
                         "db_query",
                         {
@@ -295,9 +326,10 @@ class StubLLM:
             and has("write_file")
             and not _already_wrote(messages)
         ):
-            return LLMResponse(
-                content=None,
-                tool_calls=[
+            return _resp(
+                messages,
+                None,
+                [
                     _call(
                         "write_file",
                         {
@@ -340,4 +372,4 @@ class StubLLM:
                 "report inside the sandbox when asked to. (Run with "
                 "OPENAI_API_KEY set for a live model.)"
             )
-        return LLMResponse(content=content, tool_calls=[])
+        return _resp(messages, content, [])

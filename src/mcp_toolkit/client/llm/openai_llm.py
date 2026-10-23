@@ -19,6 +19,7 @@ from mcp_toolkit.client.llm.types import (
     LLMResponse,
     OpenAIToolDef,
     SystemMessage,
+    TokenUsage,
     ToolCallDef,
     ToolMessage,
     UserMessage,
@@ -34,14 +35,14 @@ class OpenAILLM:
         model: str,
         client: AsyncOpenAI | None = None,
     ) -> None:
-        self._model = model
+        self.model = model
         self._client = client or AsyncOpenAI(api_key=api_key, max_retries=2, timeout=60.0)
 
     async def complete(
         self, messages: list[AgentMessage], tools: list[OpenAIToolDef]
     ) -> LLMResponse:
         res = await self._client.chat.completions.create(
-            model=self._model,
+            model=self.model,
             messages=[_to_openai_message(m) for m in messages],
             tools=cast(list[ChatCompletionToolParam], tools),
             tool_choice="auto",
@@ -57,7 +58,18 @@ class OpenAILLM:
                         arguments=t.function.arguments,
                     )
                 )
-        return LLMResponse(content=msg.content if msg else None, tool_calls=tool_calls)
+        res_usage = getattr(res, "usage", None)
+        usage = None
+        if res_usage is not None and res_usage.prompt_tokens is not None:
+            usage = TokenUsage(
+                prompt_tokens=res_usage.prompt_tokens,
+                completion_tokens=res_usage.completion_tokens or 0,
+            )
+        return LLMResponse(
+            content=msg.content if msg else None,
+            tool_calls=tool_calls,
+            usage=usage,
+        )
 
 
 def _to_openai_message(message: AgentMessage) -> ChatCompletionMessageParam:

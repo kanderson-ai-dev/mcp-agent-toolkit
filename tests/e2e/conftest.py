@@ -92,6 +92,9 @@ def _boot_server(log_name: str, extra_env: dict[str, str]) -> Iterator[str]:
         {
             "LLM_PROVIDER": "stub",
             "SEARCH_PROVIDER": "none",
+            # Unpriced model → costUsd null: the e2e footer pins the
+            # "no estimate when the price is unknown" rendering path.
+            "CHAT_MODEL_NAME": "e2e-offline-model",
             "WEB_PORT": str(port),
             "METRICS_PORT": "",
             "LANGCHAIN_TRACING_V2": "false",

@@ -26,6 +26,12 @@ _SECRET_VALUE_RE = re.compile(
     r"(sk-[A-Za-z0-9_\-]{6,}|pk-[A-Za-z0-9_\-]{6,}|lsv2_[A-Za-z0-9_]+|Bearer\s+\S+)"
 )
 
+# Exact-match allowlist: token *counts* are telemetry, never credentials.
+# Consulted before the substring match so usage logging stays readable.
+_NON_SECRET_TELEMETRY_KEYS = frozenset(
+    {"tokens", "total_tokens", "prompt_tokens", "completion_tokens"}
+)
+
 _LOG_LEVELS: dict[str, int] = {
     "debug": 10,
     "info": 20,
@@ -53,6 +59,8 @@ def _redact(value: Any) -> Any:
 
 def _is_secret_key(key: Any) -> bool:
     lowered = str(key).lower()
+    if lowered in _NON_SECRET_TELEMETRY_KEYS:
+        return False
     return any(part in lowered for part in _SECRET_KEY_PARTS)
 
 

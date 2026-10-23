@@ -1,13 +1,16 @@
 import { AlertTriangle, MessageSquareText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { humanizeDuration } from "../lib/format";
+import { humanizeDuration, humanizeTokens, humanizeUsd } from "../lib/format";
+import { TELEMETRY_LABEL } from "../lib/labels";
 import type { FinalResult } from "../types";
 
 /**
  * The agent's final answer — rendered Markdown (GFM) with clickable
- * citations. Footer reports steps/tool calls/elapsed in human terms;
- * `terminatedBy: "iteration_limit"` becomes an explicit warning.
+ * citations. Footer reports steps/tool calls/time/tokens/estimated cost
+ * in human terms — each telemetry piece is hidden when the run didn't
+ * report it (unknown price ⇒ no cost figure, never a fabricated $0).
+ * `terminatedBy` limits become explicit warnings.
  */
 export function FinalAnswerCard({
   final,
@@ -16,6 +19,15 @@ export function FinalAnswerCard({
   final: FinalResult;
   elapsedMs?: number;
 }) {
+  const limitWarning =
+    final.terminatedBy === "iteration_limit"
+      ? "Step limit reached — the answer may be incomplete."
+      : final.terminatedBy === "budget_limit"
+        ? "Stopped: budget reached — the answer may be incomplete."
+        : null;
+  // Prefer the backend's wall-clock measurement; fall back to the
+  // client-side timer (e.g. replays that lack durationMs).
+  const elapsed = final.durationMs ?? elapsedMs;
   return (
     <div className="animate-fade-up rounded-xl bg-indigo-500/[0.07] p-4 ring-1 ring-indigo-500/25 sm:p-5">
       <div className="flex items-center gap-2">
@@ -31,10 +43,10 @@ export function FinalAnswerCard({
         )}
       </div>
 
-      {final.terminatedBy === "iteration_limit" && (
+      {limitWarning && (
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-warn ring-1 ring-amber-500/25">
           <AlertTriangle className="size-3.5 shrink-0" />
-          Step limit reached — the answer may be incomplete.
+          {limitWarning}
         </div>
       )}
 
@@ -61,10 +73,28 @@ export function FinalAnswerCard({
             ? "no tool calls"
             : `${final.toolCalls} ${final.toolCalls === 1 ? "tool call" : "tool calls"}`}
         </span>
-        {elapsedMs !== undefined && (
+        {elapsed !== undefined && (
           <>
             <span aria-hidden="true">·</span>
-            <span>{humanizeDuration(elapsedMs)}</span>
+            <span>
+              {TELEMETRY_LABEL.time} {humanizeDuration(elapsed)}
+            </span>
+          </>
+        )}
+        {final.usage && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span title="Provider-reported prompt + completion">
+              {humanizeTokens(final.usage.totalTokens)} tokens
+            </span>
+          </>
+        )}
+        {final.costUsd != null && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span title={`${TELEMETRY_LABEL.cost} — computed from the committed price table`}>
+              {humanizeUsd(final.costUsd)}
+            </span>
           </>
         )}
       </div>

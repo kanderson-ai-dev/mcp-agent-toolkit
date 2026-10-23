@@ -257,3 +257,16 @@ async def test_benign_write_path_is_not_an_escape() -> None:
     assert [c.name for c in res.tool_calls] == ["write_file"]
     args = json.loads(res.tool_calls[0].arguments)
     assert args["path"].startswith("notes/")
+
+
+async def test_stub_usage_is_deterministic_and_labelled() -> None:
+    """Stub usage is fabricated deterministically (chars//4) — present for
+    telemetry plumbing, never a real measurement."""
+    llm = StubLLM()
+    q = _user("Search the web for MCP news")
+    r1 = await llm.complete(q, ALL_TOOLS)
+    r2 = await llm.complete(q, ALL_TOOLS)
+    assert r1.usage is not None and r2.usage is not None
+    assert r1.usage == r2.usage  # deterministic
+    assert r1.usage.prompt_tokens > 0
+    assert r1.usage.total_tokens == r1.usage.prompt_tokens + r1.usage.completion_tokens

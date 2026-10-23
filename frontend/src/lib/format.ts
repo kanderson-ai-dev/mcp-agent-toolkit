@@ -33,3 +33,18 @@ export function humanizeDate(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/** `1800` → "~1.8k", `240` → "~240", `1_200_000` → "~1.2M" tokens. */
+export function humanizeTokens(tokens: number): string {
+  if (!Number.isFinite(tokens) || tokens < 0) return "—";
+  if (tokens < 1000) return `~${Math.round(tokens)}`;
+  if (tokens < 1_000_000) return `~${(tokens / 1000).toFixed(1)}k`;
+  return `~${(tokens / 1_000_000).toFixed(1)}M`;
+}
+
+/** USD cost → "~$0.0007" / "~$0.42" — always marked as an estimate. */
+export function humanizeUsd(usd: number): string {
+  if (!Number.isFinite(usd) || usd < 0) return "—";
+  if (usd < 0.01) return `~$${usd.toFixed(4)}`;
+  return `~$${usd.toFixed(2)}`;
+}

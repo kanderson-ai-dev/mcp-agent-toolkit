@@ -113,6 +113,13 @@ export function stepLabel(iteration: number): string {
   return `Step ${iteration}`;
 }
 
+/** Run-telemetry copy — `usage`, `costUsd`, `durationMs` never render raw. */
+export const TELEMETRY_LABEL = {
+  time: "Time",
+  tokens: "Tokens",
+  cost: "Estimated cost",
+} as const;
+
 /** `requestId` → abbreviated trace label (copy button shows the full id). */
 export function traceLabel(requestId: string): string {
   return requestId.slice(0, 8);
@@ -182,6 +189,9 @@ const METRIC_LABEL: Record<string, string> = {
   toolUsage: "Tool use",
   toolUsageAppropriatePct: "Appropriate tool use",
   adversarialResisted: "Adversarial resistance",
+  avgTotalTokens: "Avg tokens",
+  avgCostUsd: "Avg cost",
+  avgDurationMs: "Avg time",
 };
 
 /** A/B metric id → "Task success" etc. */

@@ -32,6 +32,7 @@ from evaluation.scorecard import (
     THRESHOLDS,
     Aggregate,
     CheckResult,
+    PromptCostSummary,
     Scorecard,
     ScorecardEntry,
     ScorecardToolCall,
@@ -43,11 +44,12 @@ from mcp_toolkit.client.events import (
     ToolResultEvent,
 )
 from mcp_toolkit.client.llm.stub_llm import StubLLM
-from mcp_toolkit.client.llm.types import LLMClient, OpenAIToolDef
+from mcp_toolkit.client.llm.types import LLMClient, OpenAIToolDef, TokenUsage
 from mcp_toolkit.client.mcp_client import McpAgentClient, ToolInvoker, server_env
 from mcp_toolkit.client.server_spawn import resolve_server_spawn
 from mcp_toolkit.config import Settings, get_settings, load_env_file
 from mcp_toolkit.observability.logging import configure_logging, get_logger
+from mcp_toolkit.observability.pricing import parse_price_overrides, price_per_mtok
 from mcp_toolkit.prompts.loader import LoadedPrompt, load_prompt
 
 if TYPE_CHECKING:
@@ -67,6 +69,8 @@ class QuestionOutput:
     tool_calls: list[RecordedToolCall]
     iterations: int
     terminated_by: str
+    usage: TokenUsage | None = None
+    cost_usd: float | None = None
     error: str | None = None
 
 
@@ -77,6 +81,8 @@ class EvalDeps:
     tools: list[OpenAIToolDef]
     max_iterations: int
     agent_prompt: LoadedPrompt
+    budget_usd: float | None = None
+    price_per_mtok: tuple[float, float] | None = None
 
 
 async def run_question(deps: EvalDeps, prompt: str) -> QuestionOutput:
@@ -109,6 +115,8 @@ async def run_question(deps: EvalDeps, prompt: str) -> QuestionOutput:
                 max_iterations=deps.max_iterations,
                 emit=emit,
                 prompt=deps.agent_prompt,
+                budget_usd=deps.budget_usd,
+                price_per_mtok=deps.price_per_mtok,
             ),
         )
     except Exception as exc:
@@ -124,6 +132,8 @@ async def run_question(deps: EvalDeps, prompt: str) -> QuestionOutput:
         tool_calls=calls,
         iterations=res.iterations,
         terminated_by=res.terminated_by,
+        usage=res.usage,
+        cost_usd=res.cost_usd,
     )
 
 
@@ -166,6 +176,16 @@ def build_entry(
         iterations=output.iterations,
         terminated_by=output.terminated_by,
         duration_ms=duration_ms,
+        usage=(
+            {
+                "promptTokens": output.usage.prompt_tokens,
+                "completionTokens": output.usage.completion_tokens,
+                "totalTokens": output.usage.total_tokens,
+            }
+            if output.usage is not None
+            else None
+        ),
+        cost_usd=output.cost_usd,
         answer_preview=output.final_content[:800],
         checks=_to_check_result(
             check_run(q, output.tool_calls, output.final_content, system_template)
@@ -210,6 +230,37 @@ def summarize(entries: list[ScorecardEntry], judged: bool) -> Aggregate:
     ground_avg = avg(lambda j: j.grounding)
     tools_avg = avg(lambda j: j.tool_usage)
 
+    def _prompt_key(e: ScorecardEntry) -> str:
+        ref = e.prompt_version or {}
+        return f"{ref.get('name', '?')}@v{ref.get('version', '?')}"
+
+    def _token_avg(rows: list[ScorecardEntry]) -> float | None:
+        vals = [float(e.usage["totalTokens"]) for e in rows if e.usage is not None]
+        return sum(vals) / len(vals) if vals else None
+
+    def _cost_avg(rows: list[ScorecardEntry]) -> float | None:
+        vals = [e.cost_usd for e in rows if e.cost_usd is not None]
+        return sum(vals) / len(vals) if vals else None
+
+    def _duration_avg(rows: list[ScorecardEntry]) -> float | None:
+        vals = [float(e.duration_ms) for e in rows if e.duration_ms > 0]
+        return sum(vals) / len(vals) if vals else None
+
+    avg_tokens = _token_avg(entries)
+    avg_cost = _cost_avg(entries)
+    groups: dict[str, list[ScorecardEntry]] = {}
+    for e in entries:
+        groups.setdefault(_prompt_key(e), []).append(e)
+    by_prompt = {
+        key: PromptCostSummary(
+            runs=len(rows),
+            avg_total_tokens=_token_avg(rows),
+            avg_cost_usd=_cost_avg(rows),
+            avg_duration_ms=_duration_avg(rows),
+        )
+        for key, rows in groups.items()
+    }
+
     failures: list[str] = []
     if judged:
         if task_avg is not None and task_avg < THRESHOLDS["taskSuccess"]:
@@ -239,6 +290,10 @@ def summarize(entries: list[ScorecardEntry], judged: bool) -> Aggregate:
         tool_usage_appropriate_pct=tool_pct,
         adversarial_resisted=f"{resisted}/{len(adversarial)}",
         citation_verified_pct=citation_pct,
+        avg_total_tokens=avg_tokens,
+        avg_cost_usd=avg_cost,
+        avg_duration_ms=_duration_avg(entries),
+        by_prompt=by_prompt,
         passed=not failures,
         failures=failures,
     )
@@ -643,6 +698,11 @@ async def _main() -> int:
             tools=tools,
             max_iterations=settings.max_tool_iterations,
             agent_prompt=agent_prompt,
+            budget_usd=settings.run_budget_usd,
+            price_per_mtok=price_per_mtok(
+                llm.model,
+                parse_price_overrides(settings.model_pricing_json),
+            ),
         )
 
         judge_fn = None

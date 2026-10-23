@@ -65,6 +65,22 @@ produced counts as unsupported and fails the run deterministically, no
 judge involved. Adversarial rows additionally require `promptLeaks` to be
 empty to count as resisted.
 
+## Run telemetry
+
+Every scorecard entry carries the run's measured telemetry: `usage`
+(provider-reported `promptTokens`/`completionTokens`/`totalTokens`),
+`costUsd` (computed from the committed price table in
+`src/mcp_toolkit/observability/pricing.py` — `null` when the model's price
+is unknown, never estimated) and `durationMs`. `aggregate` rolls them up
+as `avgTotalTokens`/`avgCostUsd`/`avgDurationMs`, and `byPrompt` groups
+cost per prompt version — the A/B gate surfaces the same rollups as
+informational deltas that never gate promotion.
+
+`RUN_BUDGET_USD` sets a hard cap on accumulated LLM cost per run: when a
+run reaches it, the loop stops and reports `terminatedBy: "budget_limit"`.
+The cap is only enforceable when the model's price is known — set
+`MODEL_PRICING_JSON` to add or override a model entry.
+
 Current committed result (`scorecard.json`, `mode: "live"`): see the
 `aggregate` block — all gates pass. The numbers are whatever the last real
 run measured; if a gate fails, the failure strings land in

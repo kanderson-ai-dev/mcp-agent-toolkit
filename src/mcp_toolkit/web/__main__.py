@@ -22,6 +22,7 @@ from mcp_toolkit.client.server_spawn import resolve_server_spawn
 from mcp_toolkit.config import Settings, get_settings, load_env_file
 from mcp_toolkit.observability.logging import configure_logging, get_logger
 from mcp_toolkit.observability.metrics import create_metrics
+from mcp_toolkit.observability.pricing import parse_price_overrides, price_per_mtok
 from mcp_toolkit.prompts.loader import LoadedPrompt, load_prompt
 from mcp_toolkit.prompts.registry import PromptRegistry
 from mcp_toolkit.web.ab_runs import AbRunManager
@@ -101,6 +102,13 @@ def build_app(settings: Settings) -> FastAPI:
                 ),
                 metrics=metrics,
                 cors_origin=settings.web_cors_origin or None,
+                budget_usd=settings.run_budget_usd,
+                # Priced by the *running* model — a stub's fabricated
+                # usage never gets a real model's dollar figure.
+                price_per_mtok=price_per_mtok(
+                    llm.model,
+                    parse_price_overrides(settings.model_pricing_json),
+                ),
             )
             log.info(
                 "web_listen",
@@ -196,6 +204,11 @@ async def _run_ab(
         tools=openai_tools,
         max_iterations=settings.max_tool_iterations,
         agent_prompt=agent_prompt,
+        budget_usd=settings.run_budget_usd,
+        price_per_mtok=price_per_mtok(
+            ab_llm.model,
+            parse_price_overrides(settings.model_pricing_json),
+        ),
     )
     result: ABResult = await run_ab(
         name,

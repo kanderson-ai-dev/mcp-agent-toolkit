@@ -15,6 +15,7 @@ flowchart LR
         LOOP --> LLM["LLM adapter<br/>OpenAI · StubLLM"]
         LOOP --> MCPC["McpAgentClient<br/>(ClientSession wrapper)"]
         LOOP -.-> EV["event stream<br/>(AgentEvent, camelCase)"]
+        LOOP -.-> TEL["telemetry<br/>tokens · cost · latency<br/>RUN_BUDGET_USD gate"]
     end
 
     MCPC -- "stdio · JSON-RPC<br/>params._meta.requestId" --> SRV
@@ -49,10 +50,10 @@ flowchart LR
 | Tools | `server/tools/` | `web_search`, `db_query`, `read_file`, `write_file` | tool output is untrusted data (LLM01) |
 | Guardrails | `server/guardrails/` | path sandbox, read-only SQL, sanitize, rate limit | reject → typed error envelope, counted |
 | Client transport | `client/mcp_client.py`, `client/server_spawn.py` | spawn server, env allow-list, `tools/list` → OpenAI defs | `OPENAI_API_KEY` never reaches the server env |
-| Agent loop | `client/agent_loop.py` | LLM ⇄ tools, `max_iterations` bound, malformed-call recovery | tool failures fed back as messages |
-| Events | `client/events.py` | `AgentEvent` union, camelCase wire keys | parity with the oracle SSE fixture |
+| Agent loop | `client/agent_loop.py` | LLM ⇄ tools, `max_iterations` bound, malformed-call recovery, `RUN_BUDGET_USD` cost gate | tool failures fed back as messages |
+| Events | `client/events.py` | `AgentEvent` union, camelCase wire keys, `final` carries `usage`/`costUsd`/`durationMs` | parity with the oracle SSE fixture |
 | Config | `config.py` | typed `Settings`, empty string = absent | secrets are `SecretStr`, redacted in logs |
-| Observability | `observability/` | structlog + contextvars request IDs, Prometheus | dedicated registry per component |
+| Observability | `observability/` | structlog + contextvars request IDs, Prometheus, committed model price table | dedicated registry per component |
 | Entry points | `cli.py`, `scripts/demo.py`, `server/__main__.py` | `mcp-toolkit-agent`, demo, `mcp-toolkit-server` | CLI reconfigures streams to UTF-8 |
 
 ## Key flows
@@ -69,6 +70,15 @@ envelope `{status:"error",code}` with `isError=true` →
 typed error and can adapt.
 
 **Termination:** the loop ends on a tool-call-free LLM response
-(`terminated_by="answer"`) or at `MAX_TOOL_ITERATIONS`
-(`"iteration_limit"`) — guaranteed termination, recorded in
-`agent_runs_total`.
+(`terminated_by="answer"`), at `MAX_TOOL_ITERATIONS`
+(`"iteration_limit"`) or when accumulated LLM cost reaches
+`RUN_BUDGET_USD` (`"budget_limit"`) — guaranteed termination, recorded
+in `agent_runs_total`.
+
+**Telemetry:** every `final` event reports `durationMs`, provider
+`usage` (prompt/completion/total tokens) and `costUsd` — cost is only
+reported when the model has a price (committed table in
+`observability/pricing.py`, overridable via `MODEL_PRICING_JSON`),
+never estimated as $0. Scorecards and A/B evidence roll these up as
+`avgTotalTokens`/`avgCostUsd`/`avgDurationMs` — informational deltas
+that never gate promotion.

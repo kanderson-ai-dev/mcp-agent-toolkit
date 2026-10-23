@@ -36,6 +36,10 @@ from mcp_toolkit.client.llm.stub_llm import StubLLM  # noqa: E402
 from mcp_toolkit.client.mcp_client import McpAgentClient, server_env  # noqa: E402
 from mcp_toolkit.client.server_spawn import resolve_server_spawn  # noqa: E402
 from mcp_toolkit.config import Settings, get_settings, load_env_file  # noqa: E402
+from mcp_toolkit.observability.pricing import (  # noqa: E402
+    parse_price_overrides,
+    price_per_mtok,
+)
 from mcp_toolkit.prompts.ab_test import ABResult, run_ab  # noqa: E402
 from mcp_toolkit.prompts.errors import PromptRegistryError  # noqa: E402
 from mcp_toolkit.prompts.loader import LoadedPrompt  # noqa: E402
@@ -181,6 +185,11 @@ async def _run_ab_live_or_smoke(
             tools=mcp.to_openai_tools(),
             max_iterations=settings.max_tool_iterations,
             agent_prompt=agent_prompt,
+            budget_usd=settings.run_budget_usd,
+            price_per_mtok=price_per_mtok(
+                ab_llm.model,
+                parse_price_overrides(settings.model_pricing_json),
+            ),
         )
 
         def progress(msg: str) -> None:

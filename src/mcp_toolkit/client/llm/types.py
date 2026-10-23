@@ -61,13 +61,30 @@ AgentMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 
 
 @dataclass(frozen=True)
+class TokenUsage:
+    """Token accounting reported by the provider for one completion."""
+
+    prompt_tokens: int
+    completion_tokens: int
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+@dataclass(frozen=True)
 class LLMResponse:
     content: str | None
     tool_calls: Sequence[ToolCallDef] = field(default_factory=tuple)
+    usage: TokenUsage | None = None
+    """Additive/optional: token accounting when the provider reports it."""
 
 
 class LLMClient(Protocol):
     name: str
+    model: str
+    """The model id used for price lookup — real model name for live
+    providers, ``"stub"`` for the deterministic stub (unpriced)."""
 
     async def complete(
         self, messages: list[AgentMessage], tools: list[OpenAIToolDef]

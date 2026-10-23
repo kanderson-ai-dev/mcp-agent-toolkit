@@ -31,6 +31,41 @@ describe("FinalAnswerCard", () => {
     expect(screen.queryByText(/iteration_limit/)).not.toBeInTheDocument();
   });
 
+  it("warns when the run hit the budget limit", () => {
+    render(
+      <FinalAnswerCard final={{ ...FINAL, terminatedBy: "budget_limit" }} />,
+    );
+    expect(screen.getByText(/budget reached/i)).toBeInTheDocument();
+    expect(screen.queryByText(/budget_limit/)).not.toBeInTheDocument();
+  });
+
+  it("renders tokens, cost and backend duration in the footer", () => {
+    render(
+      <FinalAnswerCard
+        final={{
+          ...FINAL,
+          durationMs: 4200,
+          usage: { promptTokens: 1200, completionTokens: 600, totalTokens: 1800 },
+          costUsd: 0.0007,
+        }}
+        elapsedMs={65_000}
+      />,
+    );
+    // Backend duration wins over the client-side timer.
+    expect(screen.getByText(/Time 4\.2 s/)).toBeInTheDocument();
+    expect(screen.getByText(/~1\.8k tokens/)).toBeInTheDocument();
+    expect(screen.getByText(/~\$0\.0007/)).toBeInTheDocument();
+    expect(screen.queryByText(/totalTokens/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/costUsd/)).not.toBeInTheDocument();
+  });
+
+  it("hides telemetry pieces the run did not report — never a fake $0", () => {
+    render(<FinalAnswerCard final={FINAL} />);
+    expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Time/)).not.toBeInTheDocument();
+  });
+
   it("never activates hostile markdown: script, javascript: link, img onerror", () => {
     const hostile = [
       '<script>window.__pwned = true</script>',

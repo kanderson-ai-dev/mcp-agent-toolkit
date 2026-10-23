@@ -17,6 +17,8 @@ from typing import Any
 import structlog
 from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
 
+from mcp_toolkit.client.llm.types import TokenUsage
+
 _DURATION_BUCKETS = (0.005, 0.025, 0.1, 0.5, 1.0, 5.0, 15.0, 30.0)
 _ITERATION_BUCKETS = (1, 2, 3, 5, 8, 13, 21)
 
@@ -32,6 +34,8 @@ class Metrics:
     guardrail_blocks: Counter
     agent_runs: Counter
     agent_iterations: Histogram
+    agent_tokens: Counter
+    agent_cost_usd: Counter
 
     def record_invocation(
         self, tool: str, ok: bool, error_code: str | None, duration_s: float
@@ -50,6 +54,14 @@ class Metrics:
     ) -> None:
         self.agent_runs.labels(terminated_by=terminated_by, prompt_version=prompt_version).inc()
         self.agent_iterations.observe(iterations)
+
+    def record_run_telemetry(self, usage: TokenUsage, cost_usd: float | None) -> None:
+        """Token/cost counters for one finished run — cost only when the
+        model's price was known (``None`` is never recorded as 0)."""
+        self.agent_tokens.labels(kind="prompt").inc(usage.prompt_tokens)
+        self.agent_tokens.labels(kind="completion").inc(usage.completion_tokens)
+        if cost_usd is not None:
+            self.agent_cost_usd.inc(cost_usd)
 
 
 def create_metrics(registry: CollectorRegistry | None = None) -> Metrics:
@@ -92,6 +104,17 @@ def create_metrics(registry: CollectorRegistry | None = None) -> Metrics:
             "agent_iterations",
             "LLM iterations per agent run",
             buckets=_ITERATION_BUCKETS,
+            registry=reg,
+        ),
+        agent_tokens=Counter(
+            "agent_tokens_total",
+            "LLM tokens consumed by agent runs, by kind",
+            ["kind"],
+            registry=reg,
+        ),
+        agent_cost_usd=Counter(
+            "agent_cost_usd_total",
+            "Estimated LLM spend across agent runs in USD",
             registry=reg,
         ),
     )

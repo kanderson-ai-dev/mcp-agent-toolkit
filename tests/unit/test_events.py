@@ -16,6 +16,7 @@ from mcp_toolkit.client.events import (
     LlmMessageEvent,
     ToolCallEvent,
     ToolResultEvent,
+    UsageSummary,
     format_event,
     parse_result_envelope,
 )
@@ -105,3 +106,39 @@ def test_format_event_pretty() -> None:
         "pretty",
     )
     assert "llm:" in format_event(LlmMessageEvent(iteration=0, content="hi"), "pretty")
+
+
+def test_final_event_telemetry_wire_shape() -> None:
+    event = FinalEvent(
+        content="done",
+        iterations=2,
+        tool_calls=1,
+        terminated_by="answer",
+        duration_ms=4200,
+        usage=UsageSummary(prompt_tokens=900, completion_tokens=100, total_tokens=1000),
+        cost_usd=0.0007,
+    )
+    wire = json.loads(event.model_dump_json(by_alias=True))
+    assert wire["durationMs"] == 4200
+    assert wire["costUsd"] == 0.0007
+    assert wire["usage"] == {
+        "promptTokens": 900,
+        "completionTokens": 100,
+        "totalTokens": 1000,
+    }
+    assert "cost_usd" not in wire
+    assert "prompt_tokens" not in wire["usage"]
+
+
+def test_final_event_null_telemetry_serializes_as_null() -> None:
+    """Unknown price → explicit null on the wire, not a fabricated 0."""
+    event = FinalEvent(content="x", iterations=1, tool_calls=0, terminated_by="answer")
+    wire = json.loads(event.model_dump_json(by_alias=True))
+    assert wire["costUsd"] is None
+    assert wire["usage"] is None
+    assert wire["durationMs"] == 0
+
+
+def test_final_event_accepts_budget_limit() -> None:
+    event = FinalEvent(content="stopped", iterations=0, tool_calls=0, terminated_by="budget_limit")
+    assert json.loads(event.model_dump_json())["terminatedBy"] == "budget_limit"

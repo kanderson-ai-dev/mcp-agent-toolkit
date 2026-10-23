@@ -55,12 +55,27 @@ class PromptVersionRef(_EventModel):
     sha256: str
 
 
+class UsageSummary(_EventModel):
+    """Accumulated token accounting for the run — provider-reported."""
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
 class FinalEvent(_EventModel):
     type: Literal["final"] = "final"
     content: str
     iterations: int
     tool_calls: int
-    terminated_by: Literal["answer", "iteration_limit"]
+    terminated_by: Literal["answer", "iteration_limit", "budget_limit"]
+    duration_ms: int = 0
+    """Wall-clock run time."""
+    usage: UsageSummary | None = None
+    """Additive/optional: accumulated prompt/completion tokens."""
+    cost_usd: float | None = None
+    """Additive/optional: USD cost — ``null`` when the model's price is
+    unknown (never estimated)."""
     prompt_version: PromptVersionRef | None = None
     """Additive/optional: which registered prompt produced this run."""
 
@@ -111,9 +126,15 @@ def format_event(event: AgentEvent, fmt: Literal["pretty", "json"]) -> str:
         case LlmMessageEvent():
             return f"[iter {event.iteration}] llm: {_truncate(event.content, 140)}"
         case FinalEvent():
+            telemetry = ""
+            if event.usage is not None:
+                telemetry = f", ~{event.usage.total_tokens} tokens"
+            if event.cost_usd is not None:
+                telemetry += f", ~${event.cost_usd:.4f}"
             return (
                 f"\n=== FINAL ({event.iterations} iterations, {event.tool_calls} "
-                f"tool calls, {event.terminated_by}) ===\n{event.content}"
+                f"tool calls, {event.terminated_by}, "
+                f"{event.duration_ms / 1000:.1f}s{telemetry}) ===\n{event.content}"
             )
         case ErrorEvent():
             return f"error: {event.message}"

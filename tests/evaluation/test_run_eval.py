@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from evaluation.dataset import load_dataset
 from evaluation.judge import JudgeScores
 from evaluation.run_eval import (
@@ -250,3 +251,34 @@ def test_scorecard_round_trips_camel_case() -> None:
     assert wire["results"][0]["durationMs"] == 1
     assert wire["results"][0]["checks"]["expectedToolsCalled"] is True
     assert wire["thresholds"]["taskSuccess"] == 4.0
+
+
+def test_summarize_aggregates_telemetry() -> None:
+    """Mean tokens/cost per question + the per-prompt rollup."""
+    e1 = _entry("a", judge=_scores())
+    e1.usage = {"promptTokens": 800, "completionTokens": 200, "totalTokens": 1000}
+    e1.cost_usd = 0.001
+    e1.prompt_version = {"name": "agent_system", "version": 3, "sha256": "x"}
+    e2 = _entry("b", judge=_scores())
+    e2.usage = {"promptTokens": 1800, "completionTokens": 200, "totalTokens": 2000}
+    e2.cost_usd = 0.003
+    e2.prompt_version = {"name": "agent_system", "version": 3, "sha256": "x"}
+    e3 = _entry("c", judge=_scores())  # no usage/cost — uninstrumented row
+
+    summary = summarize([e1, e2, e3], judged=True)
+    assert summary.avg_total_tokens == pytest.approx(1500.0)
+    assert summary.avg_cost_usd == pytest.approx(0.002)
+    bucket = summary.by_prompt["agent_system@v3"]
+    assert bucket.runs == 2
+    assert bucket.avg_total_tokens == pytest.approx(1500.0)
+    assert bucket.avg_cost_usd == pytest.approx(0.002)
+    assert summary.by_prompt["?@v?"].runs == 1
+
+
+def test_summarize_telemetry_none_without_usage() -> None:
+    summary = summarize([_entry("a", judge=_scores())], judged=True)
+    assert summary.avg_total_tokens is None
+    assert summary.avg_cost_usd is None
+    # Every run still lands in the rollup, keyed by its prompt version.
+    assert summary.by_prompt["?@v?"].runs == 1
+    assert summary.by_prompt["?@v?"].avg_total_tokens is None

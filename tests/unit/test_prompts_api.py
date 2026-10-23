@@ -39,6 +39,7 @@ class FakeInvoker:
 
 class ScriptedLLM:
     name = "scripted"
+    model = "scripted-model"
 
     def __init__(self, responses: list[LLMResponse]) -> None:
         self._responses = list(responses)
@@ -685,6 +686,7 @@ class TestHotSwap:
 
         class GatedLLM:
             name = "gated"
+            model = "gated-model"
 
             async def complete(self, messages: Any, _t: Any) -> LLMResponse:
                 await gate.wait()

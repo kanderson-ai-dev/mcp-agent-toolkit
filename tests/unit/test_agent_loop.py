@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
+
 from mcp_toolkit.client.agent_loop import AgentLoopDeps, run_agent
 from mcp_toolkit.client.events import (
     AgentEvent,
@@ -17,6 +19,7 @@ from mcp_toolkit.client.llm.types import (
     AgentMessage,
     LLMResponse,
     OpenAIToolDef,
+    TokenUsage,
     ToolCallDef,
 )
 from mcp_toolkit.client.mcp_client import DiscoveredTool, ToolOutcome
@@ -25,6 +28,7 @@ from tests.helpers import test_prompt
 
 class ScriptedLLM:
     name = "scripted"
+    model = "scripted-model"
 
     def __init__(self, responses: list[LLMResponse]) -> None:
         self.responses = list(responses)
@@ -164,6 +168,7 @@ async def test_llm_failure_propagates() -> None:
 
     class BoomLLM:
         name = "boom"
+        model = "boom-model"
 
         async def complete(self, _m: list[AgentMessage], _t: list[OpenAIToolDef]) -> LLMResponse:
             raise RuntimeError("provider down")
@@ -178,7 +183,168 @@ async def test_llm_failure_propagates() -> None:
     )
     # The oracle propagates LLM failures — the loop must too (caller
     # decides retry/abort); assert the exception surfaces unchanged.
-    import pytest
-
     with pytest.raises(RuntimeError, match="provider down"):
         await run_agent("q", deps)
+
+
+# ── telemetry + budget gate ───────────────────────────────────────────
+
+
+def _priced_call(name: str, args: dict[str, Any] | str = "{}") -> LLMResponse:
+    call = _call(name, args)
+    return LLMResponse(
+        content=call.content,
+        tool_calls=call.tool_calls,
+        usage=TokenUsage(prompt_tokens=1000, completion_tokens=100),
+    )
+
+
+async def test_usage_accumulates_into_final_event() -> None:
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM(
+        [
+            _priced_call("web_search"),
+            LLMResponse(content="done", usage=TokenUsage(prompt_tokens=800, completion_tokens=50)),
+        ]
+    )
+    result = await run_agent("q", _deps(llm, FakeInvoker(), events))
+
+    assert result.usage.total_tokens == 1950
+    final = next(e for e in events if isinstance(e, FinalEvent))
+    assert final.usage is not None
+    assert final.usage.prompt_tokens == 1800
+    assert final.usage.completion_tokens == 150
+    assert final.usage.total_tokens == 1950
+    assert final.duration_ms >= 0
+
+
+async def test_cost_usd_computed_when_price_known() -> None:
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM(
+        [LLMResponse(content="x", usage=TokenUsage(prompt_tokens=1_000_000, completion_tokens=0))]
+    )
+    deps = AgentLoopDeps(
+        llm=llm,
+        invoker=FakeInvoker(),
+        tools=[],
+        max_iterations=2,
+        emit=events.append,
+        prompt=test_prompt(),
+        price_per_mtok=(0.50, 1.00),
+    )
+    result = await run_agent("q", deps)
+    assert result.cost_usd == pytest.approx(0.50)
+    final = next(e for e in events if isinstance(e, FinalEvent))
+    assert final.cost_usd == pytest.approx(0.50)
+
+
+async def test_cost_none_when_price_unknown() -> None:
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM(
+        [LLMResponse(content="x", usage=TokenUsage(prompt_tokens=5, completion_tokens=5))]
+    )
+    result = await run_agent("q", _deps(llm, FakeInvoker(), events))
+    assert result.cost_usd is None
+    final = next(e for e in events if isinstance(e, FinalEvent))
+    assert final.cost_usd is None
+
+
+async def test_budget_gate_stops_before_next_llm_call() -> None:
+    """After the first call's usage pushes cost past the cap, the loop
+    must stop with ``budget_limit`` *without* calling the LLM again."""
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM(
+        [
+            LLMResponse(
+                content=None,
+                tool_calls=[ToolCallDef(id="t1", name="web_search", arguments="{}")],
+                usage=TokenUsage(prompt_tokens=1_000_000, completion_tokens=0),
+            ),
+            LLMResponse(content="never reached"),
+        ]
+    )
+    deps = AgentLoopDeps(
+        llm=llm,
+        invoker=FakeInvoker(),
+        tools=[_tool("web_search")],
+        max_iterations=8,
+        emit=events.append,
+        prompt=test_prompt(),
+        budget_usd=0.40,
+        price_per_mtok=(0.50, 1.00),  # $0.50 after call 1 > $0.40 cap
+    )
+    result = await run_agent("q", deps)
+
+    assert result.terminated_by == "budget_limit"
+    assert len(llm.calls) == 1  # the gate fired before call 2
+    assert "budget" in result.content.lower()
+    final = next(e for e in events if isinstance(e, FinalEvent))
+    assert final.terminated_by == "budget_limit"
+    assert final.usage is not None and final.usage.total_tokens == 1_000_000
+
+
+async def test_budget_gate_passes_run_under_cap() -> None:
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM(
+        [LLMResponse(content="x", usage=TokenUsage(prompt_tokens=10, completion_tokens=5))]
+    )
+    deps = AgentLoopDeps(
+        llm=llm,
+        invoker=FakeInvoker(),
+        tools=[],
+        max_iterations=2,
+        emit=events.append,
+        prompt=test_prompt(),
+        budget_usd=5.0,
+        price_per_mtok=(0.50, 1.00),
+    )
+    result = await run_agent("q", deps)
+    assert result.terminated_by == "answer"
+
+
+async def test_budget_gate_unevaluable_without_price() -> None:
+    """An unknown-priced model can't feed the gate — the run still
+    completes normally (never a fabricated cost)."""
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM(
+        [LLMResponse(content="x", usage=TokenUsage(prompt_tokens=10, completion_tokens=5))]
+    )
+    deps = AgentLoopDeps(
+        llm=llm,
+        invoker=FakeInvoker(),
+        tools=[],
+        max_iterations=2,
+        emit=events.append,
+        prompt=test_prompt(),
+        budget_usd=0.000001,  # would trip instantly if a cost existed
+    )
+    result = await run_agent("q", deps)
+    assert result.terminated_by == "answer"
+    assert result.cost_usd is None
+
+
+async def test_metrics_record_tokens_and_cost() -> None:
+    from prometheus_client import generate_latest
+
+    from mcp_toolkit.observability.metrics import create_metrics
+
+    events: list[AgentEvent] = []
+    metrics = create_metrics()
+    llm = ScriptedLLM(
+        [LLMResponse(content="x", usage=TokenUsage(prompt_tokens=100, completion_tokens=40))]
+    )
+    deps = AgentLoopDeps(
+        llm=llm,
+        invoker=FakeInvoker(),
+        tools=[],
+        max_iterations=2,
+        emit=events.append,
+        prompt=test_prompt(),
+        metrics=metrics,
+        price_per_mtok=(1.0, 2.0),
+    )
+    await run_agent("q", deps)
+    text = generate_latest(metrics.registry).decode()
+    assert 'agent_tokens_total{kind="prompt"} 100.0' in text
+    assert 'agent_tokens_total{kind="completion"} 40.0' in text
+    assert "agent_cost_usd_total" in text

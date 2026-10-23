@@ -58,6 +58,10 @@ class WebDeps:
     # takes effect on the next run while in-flight runs keep theirs.
     prompt_provider: Callable[[], LoadedPrompt] | None = None
     prompt_api: PromptAPIDeps | None = None
+    # Run telemetry: cost cap + resolved model price (None ⇒ cost hidden,
+    # budget gate unevaluable).
+    budget_usd: float | None = None
+    price_per_mtok: tuple[float, float] | None = None
 
 
 def _deps(request: Request) -> WebDeps:
@@ -188,6 +192,8 @@ async def _event_stream(question: str, deps: WebDeps, request: Request) -> Async
                     emit=queue.put_nowait,
                     prompt=prompt,
                     metrics=deps.metrics,
+                    budget_usd=deps.budget_usd,
+                    price_per_mtok=deps.price_per_mtok,
                 ),
             )
         except Exception as exc:

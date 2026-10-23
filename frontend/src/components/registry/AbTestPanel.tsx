@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { abProgressLabel, metricLabel, regressionLabel } from "../../lib/labels";
+import { humanizeDuration, humanizeTokens, humanizeUsd } from "../../lib/format";
 import {
   PromptApiError,
   startAbRun,
@@ -27,7 +28,13 @@ const METRIC_ORDER = [
   "toolUsage",
   "toolUsageAppropriatePct",
   "adversarialResisted",
+  "avgTotalTokens",
+  "avgCostUsd",
+  "avgDurationMs",
 ];
+
+/** Telemetry metrics — signed deltas are informational, never green/red. */
+const NEUTRAL_METRICS = new Set(["avgTotalTokens", "avgCostUsd", "avgDurationMs"]);
 
 /** Delta cell — arrow icon + signed text, direction never by color alone. */
 function DeltaCell({ value }: { value: number }) {
@@ -74,9 +81,31 @@ export function AbResultTable({ result }: { result: AbResult }) {
         return s.toolUsageAppropriatePct;
       case "adversarialResisted":
         return s.adversarialResisted;
+      case "avgTotalTokens":
+        return s.avgTotalTokens == null ? null : humanizeTokens(s.avgTotalTokens);
+      case "avgCostUsd":
+        return s.avgCostUsd == null ? null : humanizeUsd(s.avgCostUsd);
+      case "avgDurationMs":
+        return s.avgDurationMs == null ? null : humanizeDuration(s.avgDurationMs);
       default:
         return null;
     }
+  };
+
+  /** Neutral signed delta — direction implies no good/bad for telemetry. */
+  const fmtDelta = (m: string): string => {
+    const v = result.deltas[m] ?? 0;
+    if (v === 0) return "±0";
+    const sign = v > 0 ? "+" : "−";
+    const mag =
+      m === "avgTotalTokens"
+        ? humanizeTokens(Math.abs(v)).replace(/^~/, "")
+        : m === "avgCostUsd"
+          ? humanizeUsd(Math.abs(v)).replace(/^~/, "")
+          : m === "avgDurationMs"
+            ? humanizeDuration(Math.abs(v))
+            : Math.abs(v).toFixed(2);
+    return `${sign}${mag}`;
   };
 
   const rows = METRIC_ORDER.filter((m) => m in result.deltas);
@@ -97,7 +126,11 @@ export function AbResultTable({ result }: { result: AbResult }) {
             <td className="py-2 pr-2 text-ink">{fmt(sideValue("baseline", m))}</td>
             <td className="py-2 pr-2 text-ink">{fmt(sideValue("candidate", m))}</td>
             <td className="py-2">
-              <DeltaCell value={result.deltas[m] ?? 0} />
+              {NEUTRAL_METRICS.has(m) ? (
+                <span className="font-medium text-muted">{fmtDelta(m)}</span>
+              ) : (
+                <DeltaCell value={result.deltas[m] ?? 0} />
+              )}
             </td>
           </tr>
         ))}

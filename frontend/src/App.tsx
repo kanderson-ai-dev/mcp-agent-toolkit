@@ -122,6 +122,9 @@ export default function App() {
                   toolCalls: event.toolCalls,
                   terminatedBy: event.terminatedBy,
                   promptVersion: event.promptVersion,
+                  usage: event.usage,
+                  costUsd: event.costUsd,
+                  durationMs: event.durationMs,
                 },
                 elapsedMs: Math.round(performance.now() - started),
               }));

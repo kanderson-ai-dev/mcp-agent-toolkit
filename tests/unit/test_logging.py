@@ -75,6 +75,28 @@ class TestRedaction:
         assert "tok-xyz" not in json.dumps(record)
         assert "[redacted]" in record["note"]
 
+    def test_token_count_keys_stay_visible_telemetry_is_not_secret(
+        self, log_stream: io.StringIO
+    ) -> None:
+        get_logger().info(
+            "check",
+            total_tokens=1800,
+            prompt_tokens=1200,
+            completion_tokens=600,
+            usage={"tokens": 10},
+            nested={
+                # noqa: S106 — fake credential for the redaction test
+                "auth_token": "real-secret"
+            },
+        )
+        (record,) = _records(log_stream)
+        assert record["total_tokens"] == 1800
+        assert record["prompt_tokens"] == 1200
+        assert record["completion_tokens"] == 600
+        assert record["usage"]["tokens"] == 10
+        # Credential-shaped keys still censor — counts are the only exemption.
+        assert record["nested"]["auth_token"] == "[redacted]"  # noqa: S105
+
     @given(
         st.dictionaries(
             st.text(min_size=1, max_size=12),
@@ -98,11 +120,15 @@ class TestRedaction:
         under secret-looking keys are always replaced by the censor."""
         redacted = _redact(event)
 
+        telemetry_keys = {"tokens", "total_tokens", "prompt_tokens", "completion_tokens"}
+
         def walk(node: Any) -> None:
             if isinstance(node, dict):
                 for key, value in node.items():
                     lowered = str(key).lower()
-                    if any(
+                    if lowered in telemetry_keys:
+                        walk(value)
+                    elif any(
                         p in lowered
                         for p in ("key", "token", "password", "secret", "authorization", "dsn")
                     ):

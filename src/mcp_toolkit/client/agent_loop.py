@@ -1,13 +1,16 @@
 """The agent loop: LLM ⇄ MCP tools.
 
-Guaranteed to terminate — bounded by ``max_iterations``. Tool failures
-are fed back to the model as tool messages so it can recover or report
-honestly. Every step emits a structured :class:`AgentEvent`.
+Guaranteed to terminate — bounded by ``max_iterations`` and the optional
+``budget_usd`` gate (enforced in code before each LLM call, never by the
+prompt). Tool failures are fed back to the model as tool messages so it
+can recover or report honestly. Every step emits a structured
+:class:`AgentEvent`.
 """
 
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,6 +24,7 @@ from mcp_toolkit.client.events import (
     PromptVersionRef,
     ToolCallEvent,
     ToolResultEvent,
+    UsageSummary,
     parse_result_envelope,
 )
 from mcp_toolkit.client.llm.types import (
@@ -29,6 +33,7 @@ from mcp_toolkit.client.llm.types import (
     LLMClient,
     OpenAIToolDef,
     SystemMessage,
+    TokenUsage,
     ToolCallDef,
     ToolMessage,
     UserMessage,
@@ -38,6 +43,8 @@ from mcp_toolkit.observability.metrics import Metrics
 from mcp_toolkit.prompts.loader import LoadedPrompt
 
 _log = structlog.get_logger("mcp_toolkit.client.agent")
+
+Termination = Literal["answer", "iteration_limit", "budget_limit"]
 
 
 @dataclass(frozen=True)
@@ -50,6 +57,13 @@ class AgentLoopDeps:
     prompt: LoadedPrompt
     """System prompt resolved from the registry — template + fingerprint."""
     metrics: Metrics | None = None
+    budget_usd: float | None = None
+    """Hard cap on accumulated LLM cost — checked before each LLM call."""
+    price_per_mtok: tuple[float, float] | None = None
+    """(prompt, completion) USD per 1M tokens, resolved by the caller via
+    ``observability.pricing`` — ``None`` when the model's price is
+    unknown, in which case cost stays ``None`` and the budget gate cannot
+    evaluate (logged once, never guessed)."""
 
 
 @dataclass(frozen=True)
@@ -57,7 +71,10 @@ class AgentRunResult:
     content: str
     iterations: int
     tool_calls: int
-    terminated_by: Literal["answer", "iteration_limit"]
+    terminated_by: Termination
+    usage: TokenUsage
+    cost_usd: float | None
+    duration_ms: int
 
 
 def _parse_tool_args(call: ToolCallDef) -> dict[str, Any]:
@@ -77,33 +94,104 @@ def _prompt_ref(deps: AgentLoopDeps) -> PromptVersionRef:
     )
 
 
+def _cost_so_far(deps: AgentLoopDeps, usage: TokenUsage) -> float | None:
+    if deps.price_per_mtok is None:
+        return None
+    prompt_price, completion_price = deps.price_per_mtok
+    return (usage.prompt_tokens * prompt_price + usage.completion_tokens * completion_price) / 1e6
+
+
+def _final(
+    deps: AgentLoopDeps,
+    content: str,
+    iterations: int,
+    tool_calls: int,
+    terminated_by: Termination,
+    usage: TokenUsage,
+    started: float,
+) -> AgentRunResult:
+    """Emit the ``final`` event, record metrics/logs, return the result —
+    one exit point so telemetry can never drift between terminations."""
+    duration_ms = round((time.perf_counter() - started) * 1000)
+    cost = _cost_so_far(deps, usage)
+    deps.emit(
+        FinalEvent(
+            content=content,
+            iterations=iterations,
+            tool_calls=tool_calls,
+            terminated_by=terminated_by,
+            duration_ms=duration_ms,
+            usage=UsageSummary(
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                total_tokens=usage.total_tokens,
+            ),
+            cost_usd=cost,
+            prompt_version=_prompt_ref(deps),
+        )
+    )
+    _record_run(deps, terminated_by, iterations, usage, cost, duration_ms)
+    return AgentRunResult(
+        content=content,
+        iterations=iterations,
+        tool_calls=tool_calls,
+        terminated_by=terminated_by,
+        usage=usage,
+        cost_usd=cost,
+        duration_ms=duration_ms,
+    )
+
+
 async def run_agent(user_prompt: str, deps: AgentLoopDeps) -> AgentRunResult:
     messages: list[AgentMessage] = [
         SystemMessage(content=deps.prompt.template),
         UserMessage(content=user_prompt),
     ]
     tool_call_count = 0
+    started = time.perf_counter()
+    usage = TokenUsage(prompt_tokens=0, completion_tokens=0)
+    budget_warned = False
 
     for iteration in range(1, deps.max_iterations + 1):
+        if deps.budget_usd is not None:
+            cost = _cost_so_far(deps, usage)
+            if cost is None:
+                if not budget_warned:
+                    _log.warning(
+                        "agent_budget_unevaluable",
+                        model="unknown price — budget gate cannot evaluate",
+                    )
+                    budget_warned = True
+            elif cost >= deps.budget_usd:
+                content = (
+                    f"Stopped: run budget reached (${cost:.4f} of ${deps.budget_usd:.4f} spent)."
+                )
+                return _final(
+                    deps,
+                    content,
+                    iteration - 1,
+                    tool_call_count,
+                    "budget_limit",
+                    usage,
+                    started,
+                )
+
         response = await deps.llm.complete(messages, deps.tools)
+        if response.usage is not None:
+            usage = TokenUsage(
+                prompt_tokens=usage.prompt_tokens + response.usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens + response.usage.completion_tokens,
+            )
 
         if not response.tool_calls:
-            content = response.content or ""
-            deps.emit(
-                FinalEvent(
-                    content=content,
-                    iterations=iteration,
-                    tool_calls=tool_call_count,
-                    terminated_by="answer",
-                    prompt_version=_prompt_ref(deps),
-                )
-            )
-            _record_run(deps, "answer", iteration)
-            return AgentRunResult(
-                content=content,
-                iterations=iteration,
-                tool_calls=tool_call_count,
-                terminated_by="answer",
+            return _final(
+                deps,
+                response.content or "",
+                iteration,
+                tool_call_count,
+                "answer",
+                usage,
+                started,
             )
 
         messages.append(
@@ -149,32 +237,37 @@ async def run_agent(user_prompt: str, deps: AgentLoopDeps) -> AgentRunResult:
     content = (
         f"Stopped: reached the iteration limit ({deps.max_iterations}) without a final answer."
     )
-    deps.emit(
-        FinalEvent(
-            content=content,
-            iterations=deps.max_iterations,
-            tool_calls=tool_call_count,
-            terminated_by="iteration_limit",
-            prompt_version=_prompt_ref(deps),
-        )
-    )
-    _record_run(deps, "iteration_limit", deps.max_iterations)
-    return AgentRunResult(
-        content=content,
-        iterations=deps.max_iterations,
-        tool_calls=tool_call_count,
-        terminated_by="iteration_limit",
+    return _final(
+        deps,
+        content,
+        deps.max_iterations,
+        tool_call_count,
+        "iteration_limit",
+        usage,
+        started,
     )
 
 
-def _record_run(deps: AgentLoopDeps, terminated_by: str, iterations: int) -> None:
+def _record_run(
+    deps: AgentLoopDeps,
+    terminated_by: str,
+    iterations: int,
+    usage: TokenUsage,
+    cost_usd: float | None,
+    duration_ms: int,
+) -> None:
     prompt_version = f"{deps.prompt.name}@v{deps.prompt.version}"
     if deps.metrics is not None:
         deps.metrics.record_agent_run(terminated_by, iterations, prompt_version)
+        deps.metrics.record_run_telemetry(usage, cost_usd)
     _log.info(
         "agent_run_finished",
         terminated_by=terminated_by,
         iterations=iterations,
+        model=deps.llm.model,
         prompt_version=prompt_version,
         prompt_sha256=deps.prompt.sha256,
+        total_tokens=usage.total_tokens,
+        cost_usd=cost_usd,
+        duration_ms=duration_ms,
     )

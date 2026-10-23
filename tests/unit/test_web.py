@@ -31,6 +31,7 @@ TOOLS = [
 
 class ScriptedLLM:
     name = "scripted"
+    model = "scripted-model"
 
     def __init__(self, responses: list[LLMResponse]) -> None:
         self.responses = list(responses)
@@ -44,6 +45,7 @@ class HangingLLM:
     the agent task instead of orphaning it."""
 
     name = "hanging"
+    model = "hanging-model"
 
     def __init__(self) -> None:
         self.cancelled = False
@@ -209,6 +211,7 @@ class TestStream:
     async def test_agent_error_becomes_error_event(self) -> None:
         class BoomLLM:
             name = "boom"
+            model = "boom-model"
 
             async def complete(self, _m: Any, _t: Any) -> LLMResponse:
                 raise RuntimeError("provider down")

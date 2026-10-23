@@ -20,6 +20,7 @@ from mcp_toolkit.client.server_spawn import resolve_server_spawn
 from mcp_toolkit.config import get_settings, load_env_file
 from mcp_toolkit.observability.logging import configure_logging
 from mcp_toolkit.observability.metrics import create_metrics
+from mcp_toolkit.observability.pricing import parse_price_overrides, price_per_mtok
 from mcp_toolkit.prompts.loader import load_prompt
 
 USAGE = """The agent spawns the MCP server over stdio, discovers its tools,
@@ -88,6 +89,11 @@ async def _run(argv: list[str]) -> int:
                 emit=emit,
                 prompt=agent_prompt,
                 metrics=metrics,
+                budget_usd=settings.run_budget_usd,
+                price_per_mtok=price_per_mtok(
+                    llm.model,
+                    parse_price_overrides(settings.model_pricing_json),
+                ),
             ),
         )
         return 0 if result.terminated_by == "answer" else 1

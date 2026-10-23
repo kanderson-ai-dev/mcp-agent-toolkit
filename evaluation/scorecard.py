@@ -59,12 +59,27 @@ class ScorecardEntry(_CamelModel):
     iterations: int
     terminated_by: str
     duration_ms: int
+    # Provider-reported token accounting, when the model reports it:
+    # {promptTokens, completionTokens, totalTokens}.
+    usage: dict[str, Any] | None = None
+    # USD cost from the committed price table — None when the model's
+    # price is unknown (never estimated).
+    cost_usd: float | None = None
     # First 800 chars of the agent's final answer — what the judge saw.
     answer_preview: str = ""
     checks: CheckResult
     judge: JudgeScores | None = None
     judge_error: str | None = None
     error: str | None = None
+
+
+class PromptCostSummary(_CamelModel):
+    """Per-prompt-version telemetry rollup — feeds the A/B table."""
+
+    runs: int
+    avg_total_tokens: float | None = None
+    avg_cost_usd: float | None = None
+    avg_duration_ms: float | None = None
 
 
 class Aggregate(_CamelModel):
@@ -76,6 +91,13 @@ class Aggregate(_CamelModel):
     # Share of citation-expecting questions whose citations all verify
     # against tool output; None when no such question ran.
     citation_verified_pct: float | None = None
+    # Mean tokens/cost/duration per question — None when the provider
+    # reports no usage (e.g. an uninstrumented adapter).
+    avg_total_tokens: float | None = None
+    avg_cost_usd: float | None = None
+    avg_duration_ms: float | None = None
+    # The same rollup keyed by "name@vN" for comparability over time.
+    by_prompt: dict[str, PromptCostSummary] = Field(default_factory=dict)
     passed: bool
     failures: list[str] = Field(default_factory=list)
 

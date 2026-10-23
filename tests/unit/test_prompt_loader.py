@@ -90,6 +90,7 @@ def test_run_agent_uses_registry_text_and_emits_prompt_version(root: Path) -> No
 
     class CaptureLLM:
         name = "capture"
+        model = "capture-model"
 
         def __init__(self) -> None:
             self.system: str | None = None

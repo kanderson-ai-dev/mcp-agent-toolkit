@@ -104,6 +104,10 @@ FORBIDDEN_LITERALS = [
     "ab_id",
     "runId",
     "sha256",
+    "totalTokens",
+    "avgTotalTokens",
+    "avgCostUsd",
+    "usage",
     "web_search",
     "db_query",
     "read_file",
@@ -209,6 +213,14 @@ def test_dataset_question(console_url: str, page: Page, question: dict[str, Any]
     # The final answer renders as markdown inside its card.
     expect(run.get_by_role("heading", name="Final answer")).to_be_visible()
     expect(run.locator(".markdown").last).to_be_visible()
+
+    # Telemetry footer: stub runs report tokens and wall time. No cost
+    # estimate ("~$…") renders when the model's price is unknown — the
+    # `~` prefix is what the cost chip always carries, so its absence
+    # proves no fabricated $0. Bare "$" figures in tool data are fine.
+    expect(run.get_by_text(re.compile(r"~\d+(?:\.\d+)?[kM]? tokens"))).to_be_visible()
+    expect(run.get_by_text(re.compile(r"Time \d"))).to_be_visible()
+    assert run.get_by_text(re.compile(r"~\$")).count() == 0
 
     # §C sweep: no internal field names or snake/camel identifiers visible.
     hits = _forbidden_hits(page, question["prompt"])

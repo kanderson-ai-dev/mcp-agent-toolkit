@@ -55,6 +55,49 @@
           "default": null,
           "title": "Citationverifiedpct"
         },
+        "avgTotalTokens": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avgtotaltokens"
+        },
+        "avgCostUsd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avgcostusd"
+        },
+        "avgDurationMs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avgdurationms"
+        },
+        "byPrompt": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PromptCostSummary"
+          },
+          "title": "Byprompt",
+          "type": "object"
+        },
         "passed": {
           "title": "Passed",
           "type": "boolean"
@@ -175,6 +218,56 @@
       "title": "JudgeScores",
       "type": "object"
     },
+    "PromptCostSummary": {
+      "description": "Per-prompt-version telemetry rollup \u2014 feeds the A/B table.",
+      "properties": {
+        "runs": {
+          "title": "Runs",
+          "type": "integer"
+        },
+        "avgTotalTokens": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avgtotaltokens"
+        },
+        "avgCostUsd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avgcostusd"
+        },
+        "avgDurationMs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avgdurationms"
+        }
+      },
+      "required": [
+        "runs"
+      ],
+      "title": "PromptCostSummary",
+      "type": "object"
+    },
     "ScorecardEntry": {
       "properties": {
         "id": {
@@ -220,6 +313,31 @@
         "durationMs": {
           "title": "Durationms",
           "type": "integer"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usage"
+        },
+        "costUsd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Costusd"
         },
         "answerPreview": {
           "default": "",

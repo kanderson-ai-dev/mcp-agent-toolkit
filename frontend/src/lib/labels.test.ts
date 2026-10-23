@@ -16,7 +16,12 @@ import {
   toolMeta,
   traceLabel,
 } from "./labels";
-import { humanizeBytes, humanizeDuration } from "./format";
+import {
+  humanizeBytes,
+  humanizeDuration,
+  humanizeTokens,
+  humanizeUsd,
+} from "./format";
 
 describe("toolMeta", () => {
   it("covers every backend tool with a friendly label and icon", () => {
@@ -219,5 +224,18 @@ describe("humanize helpers", () => {
     expect(humanizeBytes(300)).toBe("300 B");
     expect(humanizeBytes(1900)).toBe("1.9 KB");
     expect(humanizeBytes(2_500_000)).toBe("2.4 MB");
+  });
+
+  it("formats token counts as estimates", () => {
+    expect(humanizeTokens(240)).toBe("~240");
+    expect(humanizeTokens(1800)).toBe("~1.8k");
+    expect(humanizeTokens(1_250_000)).toBe("~1.3M");
+    expect(humanizeTokens(Number.NaN)).toBe("—");
+  });
+
+  it("formats USD costs as estimates — never rounds to a fake $0", () => {
+    expect(humanizeUsd(0.0007)).toBe("~$0.0007");
+    expect(humanizeUsd(0.4213)).toBe("~$0.42");
+    expect(humanizeUsd(-1)).toBe("—");
   });
 });

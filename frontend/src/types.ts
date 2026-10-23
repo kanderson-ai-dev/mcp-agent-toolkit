@@ -33,10 +33,20 @@ export type AgentEvent =
       content: string;
       iterations: number;
       toolCalls: number;
-      terminatedBy: "answer" | "iteration_limit";
+      terminatedBy: "answer" | "iteration_limit" | "budget_limit";
+      durationMs?: number;
+      usage?: UsageBreakdown | null;
+      costUsd?: number | null;
       promptVersion?: { name: string; version: number; sha256: string };
     }
   | { type: "error"; message: string };
+
+/** Provider-reported token accounting for a run (camelCase on the wire). */
+export interface UsageBreakdown {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
 
 export type ToolStepStatus = "running" | "ok" | "error";
 
@@ -65,7 +75,13 @@ export interface FinalResult {
   content: string;
   iterations: number;
   toolCalls: number;
-  terminatedBy: "answer" | "iteration_limit";
+  terminatedBy: "answer" | "iteration_limit" | "budget_limit";
+  /** Wall-clock run time reported by the backend. */
+  durationMs?: number;
+  /** Provider-reported tokens — absent for uninstrumented adapters. */
+  usage?: UsageBreakdown | null;
+  /** Estimated USD cost — null when the model's price is unknown. */
+  costUsd?: number | null;
   /** Prompt-registry provenance for the answer, when the run reports it. */
   promptVersion?: { name: string; version: number; sha256: string };
 }
@@ -145,6 +161,12 @@ export interface AbSideSummary {
   toolUsageAvg: number | null;
   toolUsageAppropriatePct: number;
   adversarialResisted: string;
+  /** Mean tokens per question — null when the provider reports no usage. */
+  avgTotalTokens?: number | null;
+  /** Mean USD cost per question — null when the model's price is unknown. */
+  avgCostUsd?: number | null;
+  /** Mean wall-clock time per question, in milliseconds. */
+  avgDurationMs?: number | null;
   passed: boolean;
 }
 

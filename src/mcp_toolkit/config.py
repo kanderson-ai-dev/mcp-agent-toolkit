@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     metrics_port: int | None = Field(default=None, ge=1, le=65535)
     output_format: Literal["pretty", "json"] = "pretty"
 
+    # ── Run telemetry / budget gate ───────────────────────────────────
+    run_budget_usd: float | None = Field(default=None, gt=0)
+    """Optional hard cap on accumulated LLM cost per run — when the run's
+    cost reaches it, the loop stops with ``terminatedBy: budget_limit``.
+    Only enforceable for models with a known price (see pricing.py)."""
+    model_pricing_json: str | None = None
+    """Optional JSON map overriding the committed price table:
+    ``{"model": {"prompt": <usd>, "completion": <usd>}}`` per 1M tokens."""
+
     # ── Evaluation / LangSmith (all optional) ─────────────────────────
     langchain_tracing_v2: Literal["true", "false"] | None = None
     langchain_api_key: SecretStr | None = None

@@ -264,6 +264,7 @@ class TestInvocationLogRecord:
 
 class _StaticLLM:
     name = "static"
+    model = "static-model"
 
     def __init__(self, responses: list[LLMResponse]) -> None:
         self.responses = list(responses)
