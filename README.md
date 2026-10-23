@@ -159,8 +159,10 @@ uv run python -m evaluation.run_eval
 ```
 
 When `LANGCHAIN_TRACING_V2` + key are set, live runs also land in
-LangSmith — earlier passes over dataset v1.1.0 (14 questions) left this
-experiment history:
+LangSmith. Earlier passes over dataset v1.1.0 (14 questions) produced the
+experiment history below — preserved here as committed captures, since the
+free tier's monthly trace quota and bounded retention mean experiments do
+not persist indefinitely on the platform:
 
 | Evidence | What it shows |
 |---|---|
@@ -403,6 +405,10 @@ Tailwind · Docker (non-root)
   the natural next step.
 - `SEARCH_PROVIDER=duckduckgo` is keyless and can rate-limit under heavy
   use; Tavily is the stable live path.
+- LangSmith tracing is opt-in and free-tier bounded: the monthly trace
+  quota can be exhausted by repeated live runs, and retention is limited —
+  the committed scorecard and `docs/eval/` captures are the durable
+  evidence, not the platform.
 
 ## 💼 Need this for your own project?
 
