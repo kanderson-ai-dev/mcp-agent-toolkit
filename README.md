@@ -111,16 +111,24 @@ dataset through the real agent (live mode: real OpenAI + real MCP transport),
 runs deterministic checks, then an independent LLM judge scores each answer.
 
 Latest committed scorecard (`evaluation/scorecard.json`, live,
-`gpt-4o-mini`, dataset v1.1.0):
+`gpt-4o-mini`, dataset v1.2.0 — 24 questions):
 
 | Dimension | Result | Gate |
 |---|---|---|
-| Task success | **4.93 / 5** | ≥ 4.0 |
-| Grounding / citation | **4.50 / 5** | ≥ 4.0 |
-| Tool usage | **4.93 / 5** | — |
+| Task success | **4.75 / 5** | ≥ 4.0 |
+| Grounding / citation | **3.58 / 5** | ≥ 4.0 — **fails** |
+| Tool usage | **4.75 / 5** | — |
 | Appropriate tool use | **100 %** | ≥ 90 % |
-| Adversarial resistance | **3 / 3** | 100 % |
+| Adversarial resistance | **13 / 13** | 100 % |
 | Citation verification | **100 %** | 100 % |
+
+The gate currently **fails on grounding** — honestly reported, not hidden.
+The drop is concentrated in two places: refusal-style adversarial answers
+(six clean refusals score `grounding=1` because there are no claims to
+verify — a rubric artefact of the expanded 13-question adversarial set)
+and `ad-11` (a genuine weakness: an oversize `write_file` request loops
+8 tool calls without converging to an answer). Every adversarial probe
+is still resisted — 13/13.
 
 Reproduce (offline smoke — mechanics only, never promotion evidence):
 
@@ -134,8 +142,9 @@ Live (needs `OPENAI_API_KEY`):
 uv run python -m evaluation.run_eval
 ```
 
-When `LANGCHAIN_TRACING_V2` + key are set, the same live run lands in
-LangSmith — the committed scorecard above has its experiment mirror:
+When `LANGCHAIN_TRACING_V2` + key are set, live runs also land in
+LangSmith — earlier passes over dataset v1.1.0 (14 questions) left this
+experiment history:
 
 | Evidence | What it shows |
 |---|---|
@@ -367,9 +376,13 @@ Tailwind · Docker (non-root)
   into shared counters (documented non-atomic check→record race — fine for
   a guardrail).
 - Streamable HTTP is loopback + bearer-token, not Internet-hardened.
-- The dataset grew to v1.2.0 (24 questions) after the committed scorecard
-  was taken — that artifact covers v1.1.0 (14 questions); a fresh live run
-  is the refresh path. It's a gate, not a benchmark either way.
+- The committed v1.2.0 scorecard **fails the grounding gate** (3.58 <
+  4.0): refusal-style adversarial answers score 1 on a rubric that has
+  nothing to ground, and `ad-11` shows a real convergence weakness on
+  oversize writes. Next steps: exempt clean refusals from grounding and
+  teach the loop to surface the guardrail error after repeated failures.
+- The dataset is 24 questions — a gate, not a benchmark; widening it is
+  the natural next step.
 - `SEARCH_PROVIDER=duckduckgo` is keyless and can rate-limit under heavy
   use; Tavily is the stable live path.
 
