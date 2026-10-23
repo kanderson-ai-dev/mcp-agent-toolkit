@@ -32,6 +32,9 @@ DESCRIPTION = (
 
 def open_readonly(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
+    # Second wall inside the same connection: even a URI-string bug that
+    # dropped mode=ro could no longer write.
+    conn.execute("PRAGMA query_only=ON")
     conn.row_factory = sqlite3.Row
     return conn
 

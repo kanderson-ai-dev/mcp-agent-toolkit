@@ -239,6 +239,35 @@ async def test_db_query_readonly_connection_blocks_writes(db_path: Path) -> None
     conn.close()
 
 
+async def test_db_query_connection_is_query_only(db_path: Path) -> None:
+    """The read-only connection promised in the docs carries both flags:
+    ``mode=ro`` in the URI *and* ``PRAGMA query_only=ON`` — sqlite itself
+    refuses writes even if one flag were lost."""
+    from mcp_toolkit.server.tools.db_query import open_readonly
+
+    conn = open_readonly(str(db_path))
+    try:
+        assert conn.execute("PRAGMA query_only").fetchone()[0] == 1
+        with pytest.raises(sqlite3.OperationalError):
+            conn.execute("CREATE TABLE x (a)")
+    finally:
+        conn.close()
+
+
+def test_query_only_alone_refuses_writes(db_path: Path) -> None:
+    """Why the pragma exists on top of ``mode=ro``: a normal read-write
+    connection with only ``query_only`` set still refuses writes while
+    reads keep working — an independent second wall."""
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("PRAGMA query_only=ON")
+        with pytest.raises(sqlite3.OperationalError):
+            conn.execute("CREATE TABLE x (a)")
+        assert conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0] == len(REPORTS)
+    finally:
+        conn.close()
+
+
 async def test_db_query_reuses_connection(db_path: Path) -> None:
     tool = create_db_query_tool(str(db_path))
     await tool.handler(query="SELECT 1", ctx=CTX)

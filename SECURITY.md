@@ -16,7 +16,7 @@ agent that reads external data).
 | Risk | OWASP | Control |
 |---|---|---|
 | Path traversal / file exfiltration | A01 | `path_sandbox`: lexical *and* canonical containment; `..`, absolute escapes, NUL bytes, symlinks and Windows junctions/UNC all rejected |
-| SQL injection / DB tampering | A03 | `db_query` read-only twice: statement guard (single SELECT/WITH, NFKC-normalized, forbidden-keyword + format-char smuggling rejected) **and** a `mode=ro` SQLite connection |
+| SQL injection / DB tampering | A03 | `db_query` read-only twice: statement guard (single SELECT/WITH, NFKC-normalized, forbidden-keyword + format-char smuggling rejected) **and** a `mode=ro` + `PRAGMA query_only=ON` SQLite connection |
 | Indirect prompt injection | LLM01 | Tool output is data, never instructions: sanitized + capped before reaching the model; never interpolated into system prompts |
 | Resource exhaustion | LLM10 / A04 | Per-tool and per-session rate limiting; byte caps on file ops; char cap on tool output; `MAX_TOOL_ITERATIONS` bound |
 | Secret leakage | A02 / LLM06 | `SecretStr` + empty=absent config; `*key*`/`*token*`/`*password*`/`*secret*` log redaction; logs carry argument *shape*, never values; server env allow-list keeps `OPENAI_API_KEY` out of the server process |
