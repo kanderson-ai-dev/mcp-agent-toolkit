@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -269,7 +270,12 @@ class _StaticLLM:
     def __init__(self, responses: list[LLMResponse]) -> None:
         self.responses = list(responses)
 
-    async def complete(self, _m: Any, _t: list[OpenAIToolDef]) -> LLMResponse:
+    async def complete(
+        self,
+        _m: Any,
+        _t: list[OpenAIToolDef],
+        on_delta: Callable[[str], None] | None = None,
+    ) -> LLMResponse:
         return self.responses.pop(0)
 
 

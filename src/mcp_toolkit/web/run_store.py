@@ -12,6 +12,15 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
+from typing import TypedDict
+
+
+class HistoryTurn(TypedDict):
+    """One prior conversation turn — validated upstream; roles are
+    ``user``/``assistant`` only (system stays server-owned)."""
+
+    role: str
+    content: str
 
 
 class RunStore:
@@ -24,16 +33,17 @@ class RunStore:
         self._ttl_s = ttl_s
         self._max_pending = max_pending
         self._now = now
-        self._pending: dict[str, tuple[str, float]] = {}
+        self._pending: dict[str, tuple[str, tuple[HistoryTurn, ...], float]] = {}
 
     def _sweep(self) -> None:
         cutoff = self._now() - self._ttl_s
-        for run_id, (_, created_at) in list(self._pending.items()):
+        for run_id, (_, _, created_at) in list(self._pending.items()):
             if created_at < cutoff:
                 del self._pending[run_id]
 
-    def create(self, question: str) -> str:
-        """Stash a validated question; returns a one-time run id."""
+    def create(self, question: str, history: tuple[HistoryTurn, ...] = ()) -> str:
+        """Stash a validated question (+ validated follow-up history);
+        returns a one-time run id."""
         self._sweep()
         if len(self._pending) >= self._max_pending:
             # Drop the oldest entry rather than grow unbounded — a local
@@ -42,14 +52,14 @@ class RunStore:
             oldest = next(iter(self._pending))
             del self._pending[oldest]
         run_id = str(uuid.uuid4())
-        self._pending[run_id] = (question, self._now())
+        self._pending[run_id] = (question, history, self._now())
         return run_id
 
-    def consume(self, run_id: str) -> str | None:
+    def consume(self, run_id: str) -> tuple[str, tuple[HistoryTurn, ...]] | None:
         """Consume (pop) a run id — single use, never replayable."""
         self._sweep()
         entry = self._pending.pop(run_id, None)
-        return entry[0] if entry is not None else None
+        return (entry[0], entry[1]) if entry is not None else None
 
     @property
     def size(self) -> int:

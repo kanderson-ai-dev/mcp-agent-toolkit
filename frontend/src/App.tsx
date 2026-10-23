@@ -10,6 +10,7 @@ import { streamRun } from "./lib/sse";
 import type {
   AgentEvent,
   ConsolePhase,
+  HistoryTurn,
   RunRecord,
   StatusInfo,
   TimelineStep,
@@ -102,10 +103,15 @@ export default function App() {
     );
   }, []);
 
+  // Follow-up context: completed runs become user/assistant turns —
+  // bounded server-side, so the client sends everything it has.
+  const historyRef = useRef<HistoryTurn[]>([]);
+
   const handleSubmit = useCallback(
     (question: string) => {
       if (phase === "streaming") return;
       const started = performance.now();
+      const history = historyRef.current;
       followRef.current = true;
       setPhase("streaming");
       setAnnouncement("Run started");
@@ -117,7 +123,7 @@ export default function App() {
       void (async () => {
         let runId: string;
         try {
-          runId = await submitQuestion(question);
+          runId = await submitQuestion(question, history);
         } catch (err) {
           const message =
             err instanceof ApiError
@@ -130,11 +136,24 @@ export default function App() {
 
         cancelRef.current = streamRun(runId, {
           onEvent: (event) => {
-            if (event.type === "final") {
+            if (event.type === "answer_delta") {
+              // Token-level streaming — accumulate into the provisional
+              // card; the `final` event replaces it with the full text.
+              patchLiveRun((run) => ({
+                ...run,
+                streamingAnswer: (run.streamingAnswer ?? "") + event.content,
+              }));
+            } else if (event.type === "final") {
               setAnnouncement("Run complete. The final answer is ready.");
+              historyRef.current = [
+                ...historyRef.current,
+                { role: "user", content: question },
+                { role: "assistant", content: event.content },
+              ];
               patchLiveRun((run) => ({
                 ...run,
                 steps: applyEvent(run.steps, event),
+                streamingAnswer: undefined,
                 final: {
                   content: event.content,
                   iterations: event.iterations,
@@ -149,14 +168,37 @@ export default function App() {
               }));
             } else if (event.type === "error") {
               setAnnouncement(`The run failed: ${event.message}`);
-              patchLiveRun((run) => ({ ...run, errorMessage: event.message }));
+              patchLiveRun((run) => ({
+                ...run,
+                streamingAnswer: undefined,
+                errorMessage: event.message,
+              }));
             } else {
               if (event.type === "tool_result") {
                 setAnnouncement(
                   `${toolMeta(event.tool).label} finished: ${event.ok ? "success" : "error"}.`,
                 );
               }
-              patchLiveRun((run) => ({ ...run, steps: applyEvent(run.steps, event) }));
+              patchLiveRun((run) => {
+                let steps = applyEvent(run.steps, event);
+                let streamingAnswer = run.streamingAnswer;
+                // A model that narrates before calling tools: the partial
+                // text is real intermediate output — fold it into a note
+                // above the new tool step rather than dropping it.
+                if (streamingAnswer && event.type === "tool_call") {
+                  steps = [
+                    ...steps.slice(0, -1),
+                    {
+                      kind: "note",
+                      iteration: event.iteration,
+                      content: streamingAnswer,
+                    },
+                    steps[steps.length - 1]!,
+                  ];
+                  streamingAnswer = undefined;
+                }
+                return { ...run, steps, streamingAnswer };
+              });
             }
           },
           onDone: (reason) => {
@@ -178,6 +220,14 @@ export default function App() {
     },
     [phase, patchLiveRun],
   );
+
+  const startNewConversation = useCallback(() => {
+    if (phase === "streaming") return;
+    historyRef.current = [];
+    setRuns([]);
+    setPhase("idle");
+    setAnnouncement("Started a new conversation.");
+  }, [phase]);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -244,6 +294,16 @@ export default function App() {
           <EmptyState examples={EXAMPLES} onPick={setDraft} />
         ) : (
           <div className="space-y-8">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={startNewConversation}
+                disabled={phase === "streaming"}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted ring-1 ring-line transition-colors hover:text-soft hover:ring-line-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-11"
+              >
+                New conversation
+              </button>
+            </div>
             {runs.map((run) => (
               <RunView
                 key={run.id}

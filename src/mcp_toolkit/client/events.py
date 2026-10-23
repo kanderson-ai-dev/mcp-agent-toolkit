@@ -46,6 +46,17 @@ class LlmMessageEvent(_EventModel):
     content: str
 
 
+class AnswerDeltaEvent(_EventModel):
+    """One streamed chunk of assistant text as the model produces it.
+
+    Additive — consumers that predate it simply ignore the frames and
+    still receive the authoritative full text in ``final``."""
+
+    type: Literal["answer_delta"] = "answer_delta"
+    iteration: int
+    content: str
+
+
 class PromptVersionRef(_EventModel):
     """Provenance of the prompt that produced a run — name, registry
     version and template fingerprint."""
@@ -86,7 +97,7 @@ class ErrorEvent(_EventModel):
 
 
 AgentEvent = Annotated[
-    ToolCallEvent | ToolResultEvent | LlmMessageEvent | FinalEvent | ErrorEvent,
+    ToolCallEvent | ToolResultEvent | LlmMessageEvent | AnswerDeltaEvent | FinalEvent | ErrorEvent,
     Field(discriminator="type"),
 ]
 
@@ -125,6 +136,8 @@ def format_event(event: AgentEvent, fmt: Literal["pretty", "json"]) -> str:
             )
         case LlmMessageEvent():
             return f"[iter {event.iteration}] llm: {_truncate(event.content, 140)}"
+        case AnswerDeltaEvent():
+            return event.content
         case FinalEvent():
             telemetry = ""
             if event.usage is not None:

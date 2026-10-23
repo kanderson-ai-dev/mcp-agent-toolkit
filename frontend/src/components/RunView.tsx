@@ -1,6 +1,8 @@
-import { AlertTriangle, User } from "lucide-react";
+import { AlertTriangle, Download, MessageSquareText, User } from "lucide-react";
+import { downloadRun } from "../lib/export";
 import type { RunRecord } from "../types";
 import { FinalAnswerCard } from "./FinalAnswerCard";
+import { Markdown } from "./Markdown";
 import { ToolStepCard } from "./ToolStepCard";
 
 /**
@@ -65,7 +67,49 @@ export function RunView({
           </div>
         )}
 
+        {!run.final && run.streamingAnswer && (
+          <div
+            aria-label="Answer in progress"
+            className="animate-fade-up rounded-xl bg-indigo-500/[0.07] p-4 ring-1 ring-indigo-500/25 sm:p-5"
+          >
+            <div className="flex items-center gap-2">
+              <MessageSquareText className="size-4 text-accent" />
+              <h3 className="text-sm font-semibold text-accent">
+                Final answer
+              </h3>
+              <span className="ml-auto rounded-full bg-indigo-500/15 px-2 py-0.5 text-[11px] font-medium text-accent/80 ring-1 ring-indigo-500/30">
+                Streaming
+              </span>
+            </div>
+            <div className="markdown mt-3">
+              <Markdown>{run.streamingAnswer}</Markdown>
+            </div>
+          </div>
+        )}
+
         {run.final && <FinalAnswerCard final={run.final} elapsedMs={run.elapsedMs} />}
+
+        {(run.final !== undefined || run.errorMessage !== undefined) && (
+          <div className="flex items-center justify-end gap-1.5">
+            <span className="text-[11px] text-muted">Export</span>
+            <button
+              type="button"
+              onClick={() => downloadRun(run, "markdown")}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted ring-1 ring-line transition-colors hover:text-soft hover:ring-line-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent max-sm:min-h-11"
+            >
+              <Download className="size-3" />
+              Markdown
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadRun(run, "json")}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted ring-1 ring-line transition-colors hover:text-soft hover:ring-line-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent max-sm:min-h-11"
+            >
+              <Download className="size-3" />
+              JSON
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

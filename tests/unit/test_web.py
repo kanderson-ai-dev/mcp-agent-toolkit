@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +43,12 @@ class ScriptedLLM:
     def __init__(self, responses: list[LLMResponse]) -> None:
         self.responses = list(responses)
 
-    async def complete(self, _m: Any, _t: list[OpenAIToolDef]) -> LLMResponse:
+    async def complete(
+        self,
+        _m: Any,
+        _t: list[OpenAIToolDef],
+        on_delta: Callable[[str], None] | None = None,
+    ) -> LLMResponse:
         return self.responses.pop(0)
 
 
@@ -56,7 +62,12 @@ class HangingLLM:
     def __init__(self) -> None:
         self.cancelled = False
 
-    async def complete(self, _m: Any, _t: list[OpenAIToolDef]) -> LLMResponse:
+    async def complete(
+        self,
+        _m: Any,
+        _t: list[OpenAIToolDef],
+        on_delta: Callable[[str], None] | None = None,
+    ) -> LLMResponse:
         try:
             await asyncio.Event().wait()
         except asyncio.CancelledError:
@@ -209,6 +220,34 @@ class TestEndpoints:
             res = await c.post("/api/chat", json={"question": "  valid question?  "})
         assert res.status_code == 201
 
+    @pytest.mark.parametrize(
+        "history",
+        [
+            "not-a-list",
+            42,
+            [{"role": "user"}],  # missing content
+            [{"role": "system", "content": "x"}],  # system stays server-owned
+            [{"role": "user", "content": ""}],  # empty turn
+            [{"role": "user", "content": "   "}],  # whitespace-only turn
+            [{"role": "user", "content": "x" * 2001}],  # over the per-turn cap
+            [{"content": "q"}],  # missing role
+            ["q"],  # non-dict entry
+        ],
+    )
+    async def test_post_chat_rejects_malformed_history(self, history: Any) -> None:
+        async with _client(create_app(_deps(ScriptedLLM([])))) as c:
+            res = await c.post("/api/chat", json={"question": "follow up?", "history": history})
+        assert res.status_code == 400
+        assert res.json() == {"error": "Invalid request."}
+
+    async def test_post_chat_history_bounded_from_oldest(self) -> None:
+        """Over-budget history is trimmed (oldest first), never a 400 —
+        the newest context always survives."""
+        history = [{"role": "user", "content": f"turn-{i}"} for i in range(30)]
+        async with _client(create_app(_deps(ScriptedLLM([])))) as c:
+            res = await c.post("/api/chat", json={"question": "follow up?", "history": history})
+        assert res.status_code == 201
+
     async def test_body_limit_413(self) -> None:
         big = {"question": "q" * 33 * 1024}
         async with _client(create_app(_deps(ScriptedLLM([])))) as c:
@@ -276,6 +315,78 @@ class TestStream:
         )
         assert "requestId" in data and "request_id" not in data
 
+    async def test_answer_deltas_stream_before_final(self) -> None:
+        """Token-level chunks arrive as ``answer_delta`` frames whose
+        concatenation is byte-identical to the ``final`` content."""
+
+        class DeltaLLM:
+            name = "delta"
+            model = "delta-model"
+
+            async def complete(
+                self, _m: Any, _t: Any, on_delta: Callable[[str], None] | None = None
+            ) -> LLMResponse:
+                if on_delta is not None:
+                    for chunk in ("Hello ", "world"):
+                        on_delta(chunk)
+                return LLMResponse(content="Hello world")
+
+        async with _client(create_app(_deps(DeltaLLM()))) as c:
+            run = await c.post("/api/chat", json={"question": "hi there"})
+            res = await c.get("/api/chat/stream", params={"runId": run.json()["runId"]})
+        names = [
+            line.removeprefix("event: ")
+            for line in res.text.splitlines()
+            if line.startswith("event: ")
+        ]
+        assert names == ["answer_delta", "answer_delta", "final"]
+        payloads = [
+            json.loads(line.removeprefix("data: "))
+            for line in res.text.splitlines()
+            if line.startswith("data: ")
+        ]
+        assert "".join(p["content"] for p in payloads[:-1]) == "Hello world"
+        assert payloads[-1]["content"] == "Hello world"
+
+    async def test_history_reaches_the_agent_before_the_question(self) -> None:
+        """Follow-up context lands between the system prompt and the new
+        question, in order."""
+
+        class RecordingLLM:
+            name = "rec"
+            model = "rec-model"
+
+            def __init__(self) -> None:
+                self.messages: list[Any] = []
+
+            async def complete(
+                self, m: Any, _t: Any, on_delta: Callable[[str], None] | None = None
+            ) -> LLMResponse:
+                self.messages = list(m)
+                return LLMResponse(content="ok")
+
+        llm = RecordingLLM()
+        async with _client(create_app(_deps(llm))) as c:
+            run = await c.post(
+                "/api/chat",
+                json={
+                    "question": "and the second one?",
+                    "history": [
+                        {"role": "user", "content": "first question"},
+                        {"role": "assistant", "content": "first answer"},
+                    ],
+                },
+            )
+            await c.get("/api/chat/stream", params={"runId": run.json()["runId"]})
+        assert [m.role for m in llm.messages] == [
+            "system",
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert llm.messages[1].content == "first question"
+        assert llm.messages[3].content == "and the second one?"
+
     async def test_run_is_single_use(self) -> None:
         llm = ScriptedLLM([LLMResponse(content="x")])
         async with _client(create_app(_deps(llm))) as c:
@@ -290,7 +401,9 @@ class TestStream:
             name = "boom"
             model = "boom-model"
 
-            async def complete(self, _m: Any, _t: Any) -> LLMResponse:
+            async def complete(
+                self, _m: Any, _t: Any, on_delta: Callable[[str], None] | None = None
+            ) -> LLMResponse:
                 raise RuntimeError("provider down")
 
         async with _client(create_app(_deps(BoomLLM()))) as c:
@@ -309,7 +422,7 @@ class TestStream:
             async def is_disconnected(self) -> bool:
                 return False
 
-        gen = _event_stream("q", deps, FakeRequest())  # type: ignore[arg-type]
+        gen = _event_stream("q", (), deps, FakeRequest())  # type: ignore[arg-type]
         # First frame starts the agent task (an async generator's body
         # only runs once pulled); heartbeat arrives quickly.
         assert await asyncio.wait_for(gen.__anext__(), timeout=2) == b": heartbeat\n\n"
@@ -326,7 +439,7 @@ class TestStream:
             async def is_disconnected(self) -> bool:
                 return False
 
-        gen = _event_stream("q", deps, FakeRequest())  # type: ignore[arg-type]
+        gen = _event_stream("q", (), deps, FakeRequest())  # type: ignore[arg-type]
         frame_bytes = await asyncio.wait_for(gen.__anext__(), timeout=2)
         await gen.aclose()
         assert frame_bytes == b": heartbeat\n\n"
@@ -336,8 +449,19 @@ class TestRunStore:
     def test_create_consume_single_use(self) -> None:
         store = RunStore()
         rid = store.create("q")
-        assert store.consume(rid) == "q"
+        assert store.consume(rid) == ("q", ())
         assert store.consume(rid) is None
+
+    def test_history_roundtrips_with_the_question(self) -> None:
+        store = RunStore()
+        rid = store.create(
+            "follow-up",
+            ({"role": "user", "content": "q1"}, {"role": "assistant", "content": "a1"}),
+        )
+        assert store.consume(rid) == (
+            "follow-up",
+            ({"role": "user", "content": "q1"}, {"role": "assistant", "content": "a1"}),
+        )
 
     def test_ttl_expiry(self) -> None:
         clock = [1000.0]

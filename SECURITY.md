@@ -38,6 +38,13 @@ Additional notes:
   `Authorization` header. This transport is a developer surface, not
   hardened for the open Internet — put it behind TLS and a real
   identity layer for anything beyond localhost.
+- **Rate limiting (`RATE_LIMIT_BACKEND`)** — `memory` (default) keeps
+  counters per server process. `redis` (opt-in, needs the `redis` extra
+  and `REDIS_URL`) shares the sliding-window counters across server
+  processes — sorted sets trimmed per access, keys namespaced by
+  `RATE_LIMIT_KEY_PREFIX`. `REDIS_URL` may embed credentials and is
+  treated as a secret. Both backends share the same check→record
+  contract; a rejected call never consumes budget.
 - **Error envelopes, not exceptions** — guardrail rejections return
   `{status:"error",code}` (`invalid_input`, `forbidden`, `not_found`,
   `rate_limited`, `upstream`, `internal`), so the model reacts to a

@@ -28,7 +28,7 @@ from __future__ import annotations
 import itertools
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from mcp_toolkit.client.llm.types import (
     AgentMessage,
@@ -150,6 +150,17 @@ def _resp(
     )
 
 
+def _delta_chunks(content: str) -> list[str]:
+    """Deterministic token-level chunks — small word groups so SSE
+    consumers see several ``answer_delta`` frames whose concatenation is
+    byte-identical to the final content."""
+    words = content.split(" ")
+    return [
+        " ".join(words[i : i + 4]) + (" " if i + 4 < len(words) else "")
+        for i in range(0, len(words), 4)
+    ]
+
+
 def _build_stub_report(messages: list[AgentMessage]) -> str:
     collected = "\n".join(
         f"## {m.name}\n\n{m.content[:800]}\n" for m in messages if isinstance(m, ToolMessage)
@@ -172,7 +183,10 @@ class StubLLM:
     """Unpriced by design — fabricated usage must never show a real cost."""
 
     async def complete(
-        self, messages: list[AgentMessage], tools: list[OpenAIToolDef]
+        self,
+        messages: list[AgentMessage],
+        tools: list[OpenAIToolDef],
+        on_delta: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         def has(tool_name: str) -> bool:
             return any(t["function"]["name"] == tool_name for t in tools)
@@ -392,4 +406,7 @@ class StubLLM:
                 "report inside the sandbox when asked to. (Run with "
                 "OPENAI_API_KEY set for a live model.)"
             )
+        if on_delta is not None:
+            for chunk in _delta_chunks(content):
+                on_delta(chunk)
         return _resp(messages, content, [])

@@ -19,6 +19,7 @@ Beyond ``tools/call`` the server publishes honest capability metadata:
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import re
 import uuid
 from dataclasses import dataclass
@@ -33,7 +34,7 @@ from pydantic import Field
 from mcp_toolkit.config import Settings
 from mcp_toolkit.observability.logging import configure_logging, get_logger
 from mcp_toolkit.observability.metrics import Metrics, create_metrics
-from mcp_toolkit.server.guardrails.rate_limiter import RateLimiter
+from mcp_toolkit.server.guardrails.rate_limiter import RateLimiter, ToolLimiter
 from mcp_toolkit.server.invocation import InvocationDeps, guarded_invoke
 from mcp_toolkit.server.search import SearchProvider, create_search_provider
 from mcp_toolkit.server.tools import build_tools
@@ -106,6 +107,31 @@ def _sandbox_index(root: Path) -> str:
     return "\n".join(lines) or "(sandbox is empty)"
 
 
+def _build_limiter(settings: Settings, logger: Any) -> ToolLimiter:
+    """Pick the rate-limit store. ``redis`` is opt-in — a missing extra
+    or connection failure is a loud startup error, never a fallback."""
+    if settings.rate_limit_backend != "redis":
+        return RateLimiter(settings.rate_limit_per_minute)
+    url = settings.redis_url.get_secret_value() if settings.redis_url is not None else None
+    if not url:
+        raise RuntimeError(
+            "RATE_LIMIT_BACKEND=redis requires REDIS_URL — "
+            "the shared limiter has nowhere to store its counters"
+        )
+    if importlib.util.find_spec("redis") is None:
+        raise RuntimeError(
+            "RATE_LIMIT_BACKEND=redis needs the optional redis extra: "
+            "pip install 'mcp-toolkit[redis]' (or uv add redis)"
+        )
+    from mcp_toolkit.server.guardrails.rate_limiter_redis import RedisRateLimiter
+
+    limiter = RedisRateLimiter.from_url(
+        url, settings.rate_limit_per_minute, key_prefix=settings.rate_limit_key_prefix
+    )
+    logger.info("rate_limiter_backend", backend="redis", per_tool=settings.rate_limit_per_minute)
+    return limiter
+
+
 def build_server(
     settings: Settings,
     provider: SearchProvider | None = None,
@@ -116,7 +142,7 @@ def build_server(
     # The server owns its sandbox root — the canonical-path check needs it
     # to exist before any write can be authorized inside it.
     settings.sandbox_root.mkdir(parents=True, exist_ok=True)
-    limiter = RateLimiter(settings.rate_limit_per_minute)
+    limiter = _build_limiter(settings, logger)
     session_id = str(uuid.uuid4())
     metrics = metrics if metrics is not None else create_metrics()
     tools = {t.name: t for t in build_tools(settings, provider or create_search_provider(settings))}

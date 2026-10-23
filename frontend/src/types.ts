@@ -29,6 +29,13 @@ export type AgentEvent =
     }
   | { type: "llm_message"; iteration: number; content: string }
   | {
+      /** Token-level chunk of the assistant's answer as it streams —
+       * additive; the `final` event still carries the full text. */
+      type: "answer_delta";
+      iteration: number;
+      content: string;
+    }
+  | {
       type: "final";
       content: string;
       iterations: number;
@@ -95,6 +102,15 @@ export interface RunRecord {
   errorMessage?: string;
   /** Wall-clock run time, filled when the stream finishes. */
   elapsedMs?: number;
+  /** Token-streamed answer text still in flight — cleared once `final`
+   * arrives (which carries the authoritative full content). */
+  streamingAnswer?: string;
+}
+
+/** A prior conversation turn sent with a follow-up question. */
+export interface HistoryTurn {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export type ConsolePhase = "idle" | "streaming" | "done" | "error";

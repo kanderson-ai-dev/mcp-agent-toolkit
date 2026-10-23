@@ -31,8 +31,14 @@ mcp-toolkit-server = "mcp_toolkit.server.__main__:main"
 mcp-toolkit-agent = "mcp_toolkit.client.cli:main"
 mcp-toolkit-web = "mcp_toolkit.web.__main__:main"
 
+[project.optional-dependencies]
+redis = [
+    "redis>=8.1.0",
+]
+
 [dependency-groups]
 dev = [
+    "fakeredis>=2.40.0",
     "hypothesis>=6.170.5",
     "mypy>=2.4.0",
     "pip-audit>=2.10.0",
@@ -41,6 +47,7 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "pytest-playwright>=0.10.0",
+    "redis>=8.1.0",
     "respx>=0.23.1",
     "ruff>=0.17.2",
     "types-lxml>=2026.2.16",

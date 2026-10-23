@@ -39,14 +39,14 @@ from mcp_toolkit.result import (
     error_result,
     ok,
 )
-from mcp_toolkit.server.guardrails.rate_limiter import RateLimiter
+from mcp_toolkit.server.guardrails.rate_limiter import ToolLimiter
 from mcp_toolkit.server.guardrails.sanitize import sanitize_tool_output
 from mcp_toolkit.server.tools.types import ToolContext, ToolDef
 
 
 @dataclass(frozen=True)
 class InvocationDeps:
-    limiter: RateLimiter
+    limiter: ToolLimiter
     session_id: str
     max_output_chars: int
     logger: structlog.stdlib.BoundLogger | structlog.typing.FilteringBoundLogger

@@ -90,6 +90,25 @@ describe("streamRun", () => {
     );
   });
 
+  it("dispatches answer_delta frames without closing the stream", () => {
+    const { events, source, done } = open();
+    source.emit("answer_delta", {
+      type: "answer_delta",
+      iteration: 1,
+      content: "Hello ",
+    });
+    source.emit("answer_delta", {
+      type: "answer_delta",
+      iteration: 1,
+      content: "world",
+    });
+    expect(events.map((e) => (e.type === "answer_delta" ? e.content : e.type))).toEqual(
+      ["Hello ", "world"],
+    );
+    expect(source.closed).toBe(false);
+    expect(done).not.toHaveBeenCalled();
+  });
+
   it("closes on a terminal event and reports 'completed' once", () => {
     const { done, source } = open();
     source.emit("final", FINAL);

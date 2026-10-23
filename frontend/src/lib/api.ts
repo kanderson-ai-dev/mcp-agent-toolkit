@@ -1,4 +1,4 @@
-import type { StatusInfo, ToolsInfo } from "../types";
+import type { HistoryTurn, StatusInfo, ToolsInfo } from "../types";
 
 /** HTTP client for the FastAPI adapter (src/mcp_toolkit/web/). Same-origin
  * always — Vite proxies `/api` in dev; FastAPI serves the build in
@@ -36,12 +36,17 @@ export async function fetchStatus(): Promise<StatusInfo> {
   return (await res.json()) as StatusInfo;
 }
 
-/** POST the question; returns the one-time runId for the SSE stream. */
-export async function submitQuestion(question: string): Promise<string> {
+/** POST the question; returns the one-time runId for the SSE stream.
+ * `history` carries prior completed turns for follow-up questions —
+ * validated and bounded server-side, never trusted blindly. */
+export async function submitQuestion(
+  question: string,
+  history: HistoryTurn[] = [],
+): Promise<string> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
   });
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   const body = (await res.json()) as { runId?: unknown };

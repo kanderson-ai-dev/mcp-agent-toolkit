@@ -62,6 +62,16 @@ class Settings(BaseSettings):
 
     # ── Guardrails ────────────────────────────────────────────────────
     rate_limit_per_minute: int = Field(default=60, gt=0)
+    rate_limit_backend: Literal["memory", "redis"] = "memory"
+    """Rate-limit store: ``memory`` (default, per-process) or ``redis``
+    (shared across MCP server processes — opt-in, needs the ``redis``
+    extra and ``REDIS_URL``)."""
+    redis_url: SecretStr | None = None
+    """Redis connection URL for the ``redis`` rate-limit backend — may
+    embed credentials, so it is a secret."""
+    rate_limit_key_prefix: str = "mcp-toolkit:rate-limit"
+    """Redis key namespace for the ``redis`` backend — lets several
+    deployments share one instance without colliding counters."""
     max_tool_iterations: int = Field(default=8, gt=0, le=50)
     max_tool_output_chars: int = Field(default=12_000, gt=0)
     read_file_max_bytes: int = Field(default=262_144, gt=0)

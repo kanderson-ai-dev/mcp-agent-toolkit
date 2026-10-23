@@ -1,6 +1,13 @@
 import type { AgentEvent } from "../types";
 
-const EVENT_TYPES = ["tool_call", "tool_result", "llm_message", "final", "error"] as const;
+const EVENT_TYPES = [
+  "tool_call",
+  "tool_result",
+  "llm_message",
+  "answer_delta",
+  "final",
+  "error",
+] as const;
 
 export interface StreamHandlers {
   onEvent: (event: AgentEvent) => void;

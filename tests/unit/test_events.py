@@ -12,6 +12,7 @@ from pydantic import TypeAdapter
 
 from mcp_toolkit.client.events import (
     AgentEvent,
+    AnswerDeltaEvent,
     FinalEvent,
     LlmMessageEvent,
     ToolCallEvent,
@@ -59,6 +60,20 @@ def test_final_event_wire_keys() -> None:
     wire = json.loads(event.model_dump_json(by_alias=True))
     assert wire["toolCalls"] == 3
     assert wire["terminatedBy"] == "answer"
+
+
+def test_answer_delta_wire_shape_and_roundtrip() -> None:
+    """Additive event: plain fields only, parses back through the union."""
+    event = AnswerDeltaEvent(iteration=1, content="Hello ")
+    wire = json.loads(event.model_dump_json(by_alias=True))
+    assert wire == {"type": "answer_delta", "iteration": 1, "content": "Hello "}
+    assert _adapter.validate_python(wire) == event
+
+
+def test_format_event_answer_delta() -> None:
+    event = AnswerDeltaEvent(iteration=1, content="chunk")
+    assert format_event(event, "pretty") == "chunk"
+    assert json.loads(format_event(event, "json"))["type"] == "answer_delta"
 
 
 @pytest.mark.parametrize(

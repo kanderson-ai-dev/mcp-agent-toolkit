@@ -6,7 +6,7 @@ another — so tests and offline runs never depend on a live provider.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, TypedDict
 
@@ -87,5 +87,11 @@ class LLMClient(Protocol):
     providers, ``"stub"`` for the deterministic stub (unpriced)."""
 
     async def complete(
-        self, messages: list[AgentMessage], tools: list[OpenAIToolDef]
-    ) -> LLMResponse: ...
+        self,
+        messages: list[AgentMessage],
+        tools: list[OpenAIToolDef],
+        on_delta: Callable[[str], None] | None = None,
+    ) -> LLMResponse:
+        """One completion. ``on_delta`` (optional) receives each content
+        chunk as the provider streams it — used for token-level answer
+        streaming; providers may ignore it, the response is authoritative."""

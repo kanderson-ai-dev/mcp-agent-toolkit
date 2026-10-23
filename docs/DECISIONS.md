@@ -133,6 +133,56 @@ the event loop never blocks on I/O.
 
 ---
 
+## ADR-8 — Synchronous `on_delta` callback for token streaming
+
+**Context.** Token-level streaming (`answer_delta` events) needs a
+channel from inside the LLM call to the agent's event emitter.
+
+**Decision.** `LLMClient.complete` takes an optional
+`on_delta: Callable[[str], None]` — a *synchronous* callback. The
+loop's `emit` is sync (in-memory append / `queue.put_nowait`), so an
+async callback would only add `await` ceremony and an extra place to
+fail. `final` still carries the full text — deltas are additive, and
+consumers that predate them (eval harness, older frontends) are
+unaffected.
+
+**Alternatives.** `AsyncIterator` yield-per-chunk changes the call's
+return contract; `Callable[[str], Awaitable[None]]` forces every
+double to `async def` its no-op. Both cost more than the feature earns.
+
+**Consequences.** StubLLM emits deterministic word-group chunks whose
+concatenation is byte-identical to `content`; OpenAILLM maps
+`stream=True` content deltas onto it and reassembles fragmented
+`tool_calls` by index. Pretty-mode CLI suppresses deltas; `--json`
+and the SSE layer forward them.
+
+---
+
+## ADR-9 — Opt-in Redis rate limiter behind `ToolLimiter`
+
+**Context.** Several MCP server processes sharing one session budget
+need shared counters; the in-memory limiter must stay the default.
+
+**Decision.** `ToolLimiter` protocol (`check`/`record`); the Redis
+backend stores `timestamp:uuid` members in sorted sets, trims the
+60 s window per access, and expires idle keys. Plain sorted-set
+commands, no Lua — check→record is two operations, accepting the
+single-call race window a guardrail can tolerate. `redis` is an
+optional extra; selecting the backend without the package or without
+`REDIS_URL` fails loudly at startup.
+
+**Alternatives.** Lua `eval` for atomicity — `fakeredis` cannot
+emulate it, and a hard dependency on script support buys marginal
+correctness for a bounded race. `redis.asyncio` — the loop-blocking
+cost of one localhost `ZADD` is ~0.1 ms, cheaper than migrating the
+whole limiter surface to async.
+
+**Consequences.** `RATE_LIMIT_BACKEND=redis` + `REDIS_URL` (a secret)
+opt in; `RATE_LIMIT_KEY_PREFIX` namespaces counters on a shared
+instance. Memory backend unchanged and still the default.
+
+---
+
 ## Spike notes (to be filled as phases land)
 
 - *Phase 3.1 (`mcp` SDK):* pending — will record `isError` production,

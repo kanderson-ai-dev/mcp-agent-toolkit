@@ -26,17 +26,27 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 
 from mcp_toolkit.client.agent_loop import AgentLoopDeps, run_agent
 from mcp_toolkit.client.events import AgentEvent, ErrorEvent
-from mcp_toolkit.client.llm.types import LLMClient, OpenAIToolDef
+from mcp_toolkit.client.llm.types import (
+    AgentMessage,
+    AssistantMessage,
+    LLMClient,
+    OpenAIToolDef,
+    UserMessage,
+)
 from mcp_toolkit.client.mcp_client import DiscoveredTool, ToolInvoker
 from mcp_toolkit.observability.metrics import Metrics
 from mcp_toolkit.prompts.loader import LoadedPrompt
 from mcp_toolkit.web import sse
 from mcp_toolkit.web.prompts_routes import PromptAPIDeps, create_prompt_router
-from mcp_toolkit.web.run_store import RunStore
+from mcp_toolkit.web.run_store import HistoryTurn, RunStore
 
 _BODY_LIMIT = 32 * 1024
 _QUESTION_MIN = 3
 _QUESTION_MAX = 2000
+# Follow-up history bounds — ~12k chars ≈ 3k tokens of prior context.
+# Oldest turns are dropped (never an error); malformed shapes are 400.
+_HISTORY_MAX_TURNS = 20
+_HISTORY_MAX_CHARS = 12_000
 
 
 @dataclass(frozen=True)
@@ -180,20 +190,23 @@ def create_app(
             return JSONResponse(
                 {"error": "Question must be at most 2000 characters."}, status_code=400
             )
-        run_id = _deps(request).runs.create(question)
+        history = _validate_history(payload.get("history"))
+        if history is None:
+            return JSONResponse({"error": "Invalid request."}, status_code=400)
+        run_id = _deps(request).runs.create(question, history)
         return JSONResponse({"runId": run_id}, status_code=201)
 
     @app.get("/api/chat/stream")
     async def stream(request: Request, runId: str | None = None) -> StreamingResponse:  # noqa: N803
         d = _deps(request)
-        question = d.runs.consume(runId) if runId else None
-        if question is None:
+        pending = d.runs.consume(runId) if runId else None
+        if pending is None:
             return JSONResponse(
                 {"error": "Unknown or expired run. Submit a new question first."},
                 status_code=404,
             )  # type: ignore[return-value]
         return StreamingResponse(
-            _event_stream(question, d, request),
+            _event_stream(pending[0], pending[1], d, request),
             media_type="text/event-stream; charset=utf-8",
             headers={
                 "Cache-Control": "no-cache, no-transform",
@@ -222,12 +235,53 @@ async def _is_disconnected(request: Request) -> bool:
     return result
 
 
-async def _event_stream(question: str, deps: WebDeps, request: Request) -> AsyncIterator[bytes]:
+def _validate_history(raw: Any) -> tuple[HistoryTurn, ...] | None:
+    """Validate a ``history`` request field → bounded turn list.
+
+    ``None`` (missing) is fine — no follow-up context. Anything that is
+    not a list of ``{role: user|assistant, content: non-empty str ≤
+    _QUESTION_MAX}`` entries is rejected outright; over-budget lists are
+    trimmed from the oldest end so the newest context always survives.
+    """
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        return None
+    turns: list[HistoryTurn] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            return None
+        role, content = entry.get("role"), entry.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            return None
+        content = content.strip()
+        if not content or len(content) > _QUESTION_MAX:
+            return None
+        turns.append(HistoryTurn(role=role, content=content))
+    while len(turns) > _HISTORY_MAX_TURNS or (
+        sum(len(t["content"]) for t in turns) > _HISTORY_MAX_CHARS and turns
+    ):
+        turns.pop(0)
+    return tuple(turns)
+
+
+async def _event_stream(
+    question: str,
+    history: tuple[HistoryTurn, ...],
+    deps: WebDeps,
+    request: Request,
+) -> AsyncIterator[bytes]:
     """Run the agent for ``question``, yielding SSE frames as events
     arrive. The agent task is cancelled (never orphaned) when the client
     disconnects mid-stream; LLM/loop failures surface as an ``error``
     event, matching the oracle."""
     queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue()
+    agent_history: list[AgentMessage] = [
+        UserMessage(content=t["content"])
+        if t["role"] == "user"
+        else AssistantMessage(content=t["content"])
+        for t in history
+    ]
 
     async def _run() -> None:
         try:
@@ -245,6 +299,7 @@ async def _event_stream(question: str, deps: WebDeps, request: Request) -> Async
                     budget_usd=deps.budget_usd,
                     price_per_mtok=deps.price_per_mtok,
                 ),
+                history=agent_history,
             )
         except Exception as exc:
             queue.put_nowait(ErrorEvent(message=str(exc)))

@@ -5,6 +5,10 @@ and ``session`` (global bound for the whole client session — one stdio
 process = one session, session limit = 4x the per-tool limit by
 default). ``now`` is injectable for deterministic tests. Over-limit
 calls raise ``rate_limited`` with a retry-after hint — never a hang.
+
+``ToolLimiter`` is the seam: ``RedisRateLimiter`` (opt-in backend, see
+``RATE_LIMIT_BACKEND``) shares counters across server processes using
+the same check/record contract.
 """
 
 from __future__ import annotations
@@ -12,10 +16,24 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
+from typing import Protocol
 
 from mcp_toolkit.result import ToolError
 
 _WINDOW_SECONDS = 60.0
+
+
+class ToolLimiter(Protocol):
+    """Rate-limit store interface — ``check`` verifies, ``record``
+    registers the call (a rejected attempt never consumes budget)."""
+
+    def check(self, tool_name: str) -> None:
+        """Raise ``ToolError("rate_limited")`` when a bound is exceeded."""
+        ...
+
+    def record(self, tool_name: str) -> None:
+        """Register a call after a successful :meth:`check`."""
+        ...
 
 
 class RateLimiter:

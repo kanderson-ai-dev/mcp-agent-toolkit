@@ -4,6 +4,7 @@ fail-fast behaviour, and ``promptVersion`` flowing through run_agent."""
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +96,9 @@ def test_run_agent_uses_registry_text_and_emits_prompt_version(root: Path) -> No
         def __init__(self) -> None:
             self.system: str | None = None
 
-        async def complete(self, messages: Any, _tools: Any) -> LLMResponse:
+        async def complete(
+            self, messages: Any, _tools: Any, on_delta: Callable[[str], None] | None = None
+        ) -> LLMResponse:
             self.system = str(messages[0].content)
             return LLMResponse(content="done", tool_calls=[])
 

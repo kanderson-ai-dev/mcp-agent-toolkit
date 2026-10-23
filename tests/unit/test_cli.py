@@ -112,6 +112,12 @@ async def test_run_full_path_stub_json(
     types = [e["type"] for e in events]
     assert "final" in types
     assert any(e["type"] == "tool_result" and e["tool"] == "db_query" for e in events)
+    # JSON mode surfaces token-level deltas; their concatenation equals
+    # the final event's content.
+    deltas = [e["content"] for e in events if e["type"] == "answer_delta"]
+    final = next(e for e in events if e["type"] == "final")
+    assert len(deltas) > 1
+    assert "".join(deltas) == final["content"]
 
 
 async def test_run_nonzero_exit_on_iteration_limit(

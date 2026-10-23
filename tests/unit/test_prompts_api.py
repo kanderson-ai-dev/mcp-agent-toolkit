@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,9 @@ class ScriptedLLM:
     def __init__(self, responses: list[LLMResponse]) -> None:
         self._responses = list(responses)
 
-    async def complete(self, _m: Any, _t: Any) -> LLMResponse:
+    async def complete(
+        self, _m: Any, _t: Any, on_delta: Callable[[str], None] | None = None
+    ) -> LLMResponse:
         return self._responses.pop(0)
 
 
@@ -688,7 +691,9 @@ class TestHotSwap:
             name = "gated"
             model = "gated-model"
 
-            async def complete(self, messages: Any, _t: Any) -> LLMResponse:
+            async def complete(
+                self, messages: Any, _t: Any, on_delta: Callable[[str], None] | None = None
+            ) -> LLMResponse:
                 await gate.wait()
                 return LLMResponse(content="done")
 

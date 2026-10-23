@@ -1,9 +1,8 @@
 import { AlertTriangle, MessageSquareText } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { humanizeDuration, humanizeTokens, humanizeUsd } from "../lib/format";
 import { TELEMETRY_LABEL } from "../lib/labels";
 import type { FinalResult } from "../types";
+import { Markdown } from "./Markdown";
 
 /**
  * The agent's final answer — rendered Markdown (GFM) with clickable
@@ -57,18 +56,7 @@ export function FinalAnswerCard({
       )}
 
       <div className="markdown mt-3">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            a: ({ href, children }) => (
-              <a href={href} target="_blank" rel="noopener noreferrer">
-                {children}
-              </a>
-            ),
-          }}
-        >
-          {final.content}
-        </ReactMarkdown>
+        <Markdown>{final.content}</Markdown>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-indigo-500/15 pt-3 text-xs text-accent/60">

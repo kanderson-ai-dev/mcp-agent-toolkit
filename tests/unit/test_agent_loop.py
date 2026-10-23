@@ -4,6 +4,7 @@ iteration bound, all with scripted doubles (no LLM, no transport)."""
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -11,6 +12,7 @@ import pytest
 from mcp_toolkit.client.agent_loop import AgentLoopDeps, run_agent
 from mcp_toolkit.client.events import (
     AgentEvent,
+    AnswerDeltaEvent,
     FinalEvent,
     ToolCallEvent,
     ToolResultEvent,
@@ -35,7 +37,10 @@ class ScriptedLLM:
         self.calls: list[list[AgentMessage]] = []
 
     async def complete(
-        self, messages: list[AgentMessage], _tools: list[OpenAIToolDef]
+        self,
+        messages: list[AgentMessage],
+        _tools: list[OpenAIToolDef],
+        on_delta: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         self.calls.append(list(messages))
         return self.responses.pop(0)
@@ -170,7 +175,12 @@ async def test_llm_failure_propagates() -> None:
         name = "boom"
         model = "boom-model"
 
-        async def complete(self, _m: list[AgentMessage], _t: list[OpenAIToolDef]) -> LLMResponse:
+        async def complete(
+            self,
+            _m: list[AgentMessage],
+            _t: list[OpenAIToolDef],
+            on_delta: Callable[[str], None] | None = None,
+        ) -> LLMResponse:
             raise RuntimeError("provider down")
 
     deps = AgentLoopDeps(
@@ -348,3 +358,72 @@ async def test_metrics_record_tokens_and_cost() -> None:
     assert 'agent_tokens_total{kind="prompt"} 100.0' in text
     assert 'agent_tokens_total{kind="completion"} 40.0' in text
     assert "agent_cost_usd_total" in text
+
+
+# ── token streaming + follow-up history (Phase 19) ────────────────────
+
+
+async def test_llm_deltas_become_answer_delta_events() -> None:
+    """Every callback chunk is re-emitted as an ``answer_delta`` — the
+    ``final`` event still carries the full authoritative content."""
+
+    class DeltaLLM:
+        name = "delta"
+        model = "delta-model"
+
+        async def complete(
+            self,
+            _m: list[AgentMessage],
+            _t: list[OpenAIToolDef],
+            on_delta: Callable[[str], None] | None = None,
+        ) -> LLMResponse:
+            assert on_delta is not None  # the loop always supplies it
+            for chunk in ("Hello ", "world"):
+                on_delta(chunk)
+            return LLMResponse(content="Hello world")
+
+    events: list[AgentEvent] = []
+    deps = AgentLoopDeps(
+        llm=DeltaLLM(),  # type: ignore[arg-type]
+        invoker=FakeInvoker(),
+        tools=[],
+        max_iterations=2,
+        emit=events.append,
+        prompt=test_prompt(),
+    )
+    result = await run_agent("q", deps)
+    deltas = [e.content for e in events if isinstance(e, AnswerDeltaEvent)]
+    assert deltas == ["Hello ", "world"]
+    final = next(e for e in events if isinstance(e, FinalEvent))
+    assert final.content == "Hello world" == result.content
+
+
+async def test_llm_without_delta_support_still_works() -> None:
+    """A complete() that ignores the callback is unaffected."""
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM([LLMResponse(content="done")])
+    result = await run_agent("q", _deps(llm, FakeInvoker(), events))
+    assert result.content == "done"
+    assert not [e for e in events if isinstance(e, AnswerDeltaEvent)]
+
+
+async def test_history_is_prepended_between_system_and_question() -> None:
+    from mcp_toolkit.client.llm.types import (
+        AssistantMessage,
+        SystemMessage,
+        UserMessage,
+    )
+
+    events: list[AgentEvent] = []
+    llm = ScriptedLLM([LLMResponse(content="follow-up answer")])
+    history: list[AgentMessage] = [
+        UserMessage(content="first question"),
+        AssistantMessage(content="first answer"),
+    ]
+    await run_agent("and the second one?", _deps(llm, FakeInvoker(), events), history=history)
+
+    sent = llm.calls[0]
+    assert isinstance(sent[0], SystemMessage)
+    assert sent[1] == UserMessage(content="first question")
+    assert sent[2] == AssistantMessage(content="first answer")
+    assert sent[3] == UserMessage(content="and the second one?")

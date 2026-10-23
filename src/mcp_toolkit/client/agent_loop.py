@@ -14,12 +14,14 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Literal
 
 import structlog
 
 from mcp_toolkit.client.events import (
     AgentEvent,
+    AnswerDeltaEvent,
     FinalEvent,
     PromptVersionRef,
     ToolCallEvent,
@@ -75,6 +77,12 @@ class AgentRunResult:
     usage: TokenUsage
     cost_usd: float | None
     duration_ms: int
+
+
+def _emit_delta(deps: AgentLoopDeps, iteration: int, text: str) -> None:
+    """One streamed token chunk → one ``answer_delta`` event (bound via
+    ``partial`` so each iteration's number travels with the chunk)."""
+    deps.emit(AnswerDeltaEvent(iteration=iteration, content=text))
 
 
 def _parse_tool_args(call: ToolCallDef) -> dict[str, Any]:
@@ -142,9 +150,16 @@ def _final(
     )
 
 
-async def run_agent(user_prompt: str, deps: AgentLoopDeps) -> AgentRunResult:
+async def run_agent(
+    user_prompt: str,
+    deps: AgentLoopDeps,
+    history: list[AgentMessage] | None = None,
+) -> AgentRunResult:
+    """Run the loop. ``history`` carries prior user/assistant turns for
+    follow-up questions — already validated/bounded by the caller."""
     messages: list[AgentMessage] = [
         SystemMessage(content=deps.prompt.template),
+        *(history or []),
         UserMessage(content=user_prompt),
     ]
     tool_call_count = 0
@@ -176,7 +191,11 @@ async def run_agent(user_prompt: str, deps: AgentLoopDeps) -> AgentRunResult:
                     started,
                 )
 
-        response = await deps.llm.complete(messages, deps.tools)
+        response = await deps.llm.complete(
+            messages,
+            deps.tools,
+            on_delta=partial(_emit_delta, deps, iteration),
+        )
         if response.usage is not None:
             usage = TokenUsage(
                 prompt_tokens=usage.prompt_tokens + response.usage.prompt_tokens,

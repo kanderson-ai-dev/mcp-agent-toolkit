@@ -13,7 +13,7 @@ import sys
 from typing import Any
 
 from mcp_toolkit.client.agent_loop import AgentLoopDeps, run_agent
-from mcp_toolkit.client.events import LlmMessageEvent, format_event
+from mcp_toolkit.client.events import AnswerDeltaEvent, LlmMessageEvent, format_event
 from mcp_toolkit.client.llm import create_llm
 from mcp_toolkit.client.mcp_client import McpAgentClient, server_env
 from mcp_toolkit.client.server_spawn import resolve_server_spawn
@@ -64,6 +64,13 @@ async def _run(argv: list[str]) -> int:
     )
 
     def emit(event: Any) -> None:
+        # Answer deltas stream for machine consumers (--json) and the
+        # web SSE layer; pretty mode prints the final event's full text
+        # once, so repeating every chunk would just be noise.
+        if isinstance(event, AnswerDeltaEvent):
+            if fmt == "json":
+                print(format_event(event, fmt))
+            return
         print(format_event(event, fmt))
 
     async with McpAgentClient.connect_stdio(spawn.command, spawn.args, env=server_env()) as mcp:
