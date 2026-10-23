@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -49,6 +48,7 @@ from mcp_toolkit.web.ab_runs import (
     AbRun,
     AbRunManager,
     latest_ab_result,
+    save_ab_wire,
 )
 
 if TYPE_CHECKING:
@@ -444,7 +444,8 @@ def create_prompt_router(
     def _persist(deps: PromptAPIDeps) -> Callable[[AbRun], None]:
         def _save(run: AbRun) -> None:
             if run.status == "completed" and run.result is not None:
-                # Persisted evidence for a later promote call + audit.
+                # Audit + persist the result — the evidence a later
+                # promote call reads, independent of process memory.
                 registry = deps.registry
                 wire = run.result
                 registry.audit_log.append(
@@ -460,23 +461,11 @@ def create_prompt_router(
                         "run_id": run.id,
                     }
                 )
-                _persist_result_file(wire, deps.ab_results_dir)
+                save_ab_wire(wire, deps.ab_results_dir)
 
         return _save
 
     return router
-
-
-def _persist_result_file(wire: dict[str, Any], out_dir: Path) -> None:
-    """Write the run's A/B result to the evidence dir — promote-time
-    evidence independent of process memory."""
-    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / (
-        f"{wire['name']}-b{wire['baselineVersion']}-c{wire['candidateVersion']}-"
-        f"{wire['candidateSha256'][:8]}-{stamp}.json"
-    )
-    path.write_text(json.dumps(wire, indent=2), encoding="utf-8")
 
 
 def _find_evidence(

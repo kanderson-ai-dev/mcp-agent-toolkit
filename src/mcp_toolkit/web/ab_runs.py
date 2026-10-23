@@ -11,7 +11,9 @@ flag.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -26,6 +28,36 @@ if TYPE_CHECKING:
     from mcp_toolkit.prompts.ab_test import ABResult
 
 AB_RESULTS_DIR = Path("data/prompt-registry/ab")
+
+# Artifact names match the registry's own pattern — interpolated into
+# file names and globs, so anything else is refused at the boundary.
+_PROMPT_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _evidence_stem(name: str, baseline: int, candidate: int, sha256: str) -> str:
+    if not _PROMPT_NAME.fullmatch(name):
+        raise ValueError(f"invalid prompt name {name!r}")
+    return f"{name}-b{baseline}-c{candidate}-{sha256[:8]}"
+
+
+def _persist_evidence(out_dir: Path, stem: str, payload: str) -> Path:
+    """Write ``payload`` to ``<stem>-<utc stamp>[-N].json`` — exclusive
+    create only: two saves inside the same second produce two files and
+    existing evidence is never overwritten."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    for attempt in itertools.count(1):
+        suffix = "" if attempt == 1 else f"-{attempt}"
+        path = out_dir / f"{stem}-{stamp}{suffix}.json"
+        try:
+            with path.open("x", encoding="utf-8") as fh:
+                fh.write(payload)
+        except FileExistsError:
+            if attempt == 100:
+                raise
+            continue
+        return path
+    raise AssertionError("unreachable")  # itertools.count never ends
 
 
 @dataclass
@@ -46,18 +78,31 @@ class AbRun:
 def ab_result_path(out_dir: Path, result: ABResult) -> Path:
     """Deterministic file name: name, versions, sha prefix, timestamp."""
     stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-    return out_dir / (
-        f"{result.name}-b{result.baseline_version}-c{result.candidate_version}-"
-        f"{result.candidate_sha256[:8]}-{stamp}.json"
+    stem = _evidence_stem(
+        result.name,
+        result.baseline_version,
+        result.candidate_version,
+        result.candidate_sha256,
     )
+    return out_dir / f"{stem}-{stamp}.json"
+
+
+def save_ab_wire(wire: dict[str, Any], out_dir: Path | str | None = None) -> Path:
+    """Persist a completed A/B wire payload (what the API's on-done hook
+    holds) — identical names and JSON to ``save_ab_result``."""
+    stem = _evidence_stem(
+        str(wire["name"]),
+        int(wire["baselineVersion"]),
+        int(wire["candidateVersion"]),
+        str(wire["candidateSha256"]),
+    )
+    root = Path(out_dir) if out_dir is not None else AB_RESULTS_DIR
+    return _persist_evidence(root, stem, json.dumps(wire, indent=2))
 
 
 def save_ab_result(result: ABResult, out_dir: Path | str | None = None) -> Path:
     """Persist a completed A/B result as promote-time evidence."""
-    path = ab_result_path(Path(out_dir) if out_dir is not None else AB_RESULTS_DIR, result)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result.to_wire(), indent=2), encoding="utf-8")
-    return path
+    return save_ab_wire(result.to_wire(), out_dir)
 
 
 def latest_ab_result(
@@ -65,9 +110,9 @@ def latest_ab_result(
 ) -> dict[str, Any] | None:
     """Newest persisted A/B result whose candidate is ``version``."""
     root = Path(out_dir) if out_dir is not None else AB_RESULTS_DIR
-    if not root.exists():
+    if not _PROMPT_NAME.fullmatch(name) or not root.exists():
         return None
-    best: tuple[float, dict[str, Any]] | None = None
+    best: tuple[float, str, dict[str, Any]] | None = None
     for f in root.glob(f"{name}-*-c{candidate_version}-*.json"):
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
@@ -75,10 +120,10 @@ def latest_ab_result(
             continue
         if data.get("candidateVersion") != candidate_version:
             continue
-        mtime = f.stat().st_mtime
-        if best is None or mtime > best[0]:
-            best = (mtime, data)
-    return best[1] if best else None
+        key = (f.stat().st_mtime, f.name)
+        if best is None or key > (best[0], best[1]):
+            best = (*key, data)
+    return best[2] if best else None
 
 
 class AbRunManager:

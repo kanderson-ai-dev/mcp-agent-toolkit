@@ -344,6 +344,49 @@ def test_latest_ab_result_skips_corrupt_files(tmp_path: Any) -> None:
     assert latest_ab_result("agent_system", 1, tmp_path / "missing") is None
 
 
+def test_save_never_overwrites_same_second_evidence(tmp_path: Any) -> None:
+    """Two saves in one second must produce two files — evidence is
+    append-only, never overwritten."""
+    import json
+
+    from mcp_toolkit.web.ab_runs import save_ab_wire
+
+    wire = {
+        "name": "agent_system",
+        "baselineVersion": 1,
+        "candidateVersion": 2,
+        "candidateSha256": "c" * 64,
+        "mode": "live",
+    }
+    first = save_ab_wire(wire, tmp_path)
+    second = save_ab_wire(wire, tmp_path)
+    assert first != second
+    assert len(list(tmp_path.glob("agent_system-*.json"))) == 2
+    for path in (first, second):
+        assert json.loads(path.read_text(encoding="utf-8"))["candidateVersion"] == 2
+
+
+def test_ab_evidence_rejects_non_prompt_names(tmp_path: Any) -> None:
+    """Names are interpolated into globs — anything outside the artifact
+    pattern is refused, never matched against other prompts' files."""
+    import pytest
+
+    from mcp_toolkit.web.ab_runs import latest_ab_result, save_ab_wire
+
+    for bad in ("*", "..", "../x", "a/b", "UPPER"):
+        assert latest_ab_result(bad, 2, tmp_path) is None
+        with pytest.raises(ValueError, match="invalid prompt name"):
+            save_ab_wire(
+                {
+                    "name": bad,
+                    "baselineVersion": 1,
+                    "candidateVersion": 2,
+                    "candidateSha256": "c" * 64,
+                },
+                tmp_path,
+            )
+
+
 async def test_to_wire_uses_camel_keys() -> None:
     result = await run_ab(
         "agent_system",

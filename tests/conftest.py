@@ -7,8 +7,10 @@ clean credential environment unless ``RUN_LIVE_TESTS=1`` is set, and
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -77,6 +79,41 @@ def _offline_env() -> Iterator[None]:
     for key, value in saved.items():
         if value is not None:
             os.environ[key] = value
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _evidence_store_pristine() -> Iterator[None]:
+    """The suite must never touch the real prompt-registry evidence store.
+
+    ``data/prompt-registry/`` holds the production A/B evidence the
+    promote gate reads, and it is gitignored — a test writing there is
+    invisible to ``git status``. Snapshot content hashes before the
+    session and fail loudly if anything changed.
+    """
+    root = Path("data/prompt-registry")
+
+    def snapshot() -> dict[str, str]:
+        out: dict[str, str] = {}
+        if root.exists():
+            for f in sorted(root.rglob("*")):
+                if f.is_file():
+                    out[str(f.relative_to(root))] = hashlib.sha256(f.read_bytes()).hexdigest()
+        return out
+
+    if _live_enabled():
+        yield
+        return
+    before = snapshot()
+    yield
+    after = snapshot()
+    if before != after:
+        added = sorted(set(after) - set(before))
+        changed = sorted(k for k in before.keys() & after.keys() if before[k] != after[k])
+        removed = sorted(set(before) - set(after))
+        pytest.fail(
+            "test run mutated data/prompt-registry/ — tests must use temp "
+            f"dirs. added={added} changed={changed} removed={removed}"
+        )
 
 
 def _e2e_enabled(config: pytest.Config) -> bool:

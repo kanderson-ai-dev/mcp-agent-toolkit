@@ -64,7 +64,9 @@ def _api_deps(
         admin_enabled=admin,
         ab_manager=manager or AbRunManager(),
         make_ab_runner=runner,
-        ab_results_dir=ab_results_dir,
+        # Per-test dir by default: the real data/prompt-registry/ab is
+        # production evidence the promote gate reads — never a test sink.
+        ab_results_dir=ab_results_dir or registry.root.parent / "ab",
     )
 
 
