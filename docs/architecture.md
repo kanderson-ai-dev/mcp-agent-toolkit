@@ -95,3 +95,35 @@ adversarial topic cannot smuggle a path. `tools/list` metadata flows
 through `McpAgentClient.DiscoveredTool` into `GET /api/tools`, where the
 console renders annotations as human chips via `lib/labels.ts` (raw hint
 keys never render).
+
+**Prompt flow:** the registry (`prompts/<name>/vN.yaml`) is the source of
+truth → `prompts/loader.py` resolves `latest-promoted` (or an explicit
+version) → the agent loop runs the resolved template → every run reports
+which `{name, version, sha256}` produced it (`promptVersion` on `final`)
+→ the same ref reaches the console chip, the metrics labels
+(`agent_runs_total{prompt_version}`) and the A/B scorecards. The web
+console resolves the prompt **per run** through `prompt_provider`, so a
+promotion hot-swaps for new runs while in-flight runs keep theirs.
+Mutations (candidate → A/B → promote / rollback) write hash-chained
+entries to `data/prompt-registry/audit.jsonl`; `audit.verify_chain()`
+rejects tampered history.
+
+**Event flow (token streaming):** `LLMClient.complete` accepts an
+optional synchronous `on_delta` — the loop re-emits each chunk as an
+`answer_delta` event (ADR-8). `StubLLM` emits deterministic word-group
+chunks; `OpenAILLM` maps `stream=True` content deltas and reassembles
+fragmented `tool_calls` by index. Deltas are additive: the `final`
+event still carries the authoritative full text, so the eval harness
+and any consumer that predates the event type need no change.
+
+## Transport matrix
+
+| | stdio (default) | Streamable HTTP (opt-in) |
+|---|---|---|
+| Config | `MCP_TRANSPORT=stdio` | `MCP_TRANSPORT=streamable-http` + `MCP_HTTP_HOST/PORT/TOKEN` |
+| Process model | client spawns the server; env allow-listed | standalone `mcp-toolkit-server` (or any ASGI host) |
+| Listener | none — JSON-RPC on the child's stdout | uvicorn bind, `127.0.0.1` default |
+| Auth | OS process boundary | bearer token — **mandatory on non-loopback**, constant-time compare |
+| Secrets reaching the server | only allow-listed env vars | same + the token never logged |
+| Intended use | the canonical transport (CLI, web adapter, tests) | clients that cannot spawn a subprocess; not Internet-hardened |
+| Tests | `tests/integration/test_mcp_stdio.py` | `tests/integration/test_streamable_http.py` |

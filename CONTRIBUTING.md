@@ -27,10 +27,13 @@ Run once per change — CI enforces all of it:
 ```bash
 uv run ruff check . && uv run ruff format --check .
 uv run mypy --strict src
-uv run pytest -q --cov=src --cov-branch --cov-fail-under=90
+uv run pytest -q --cov=src --cov-branch --cov-fail-under=92
+uv run pytest tests/e2e -q                      # needs a frontend build (npm run build)
 uv lock --check
-uv run pip-audit
+uv run pip-audit -r requirements.txt            # regen via: uv export --frozen --no-emit-project
 gitleaks detect --no-banner
+npm --prefix frontend run lint && npm --prefix frontend run typecheck
+npm --prefix frontend test -- --run && npm --prefix frontend run build
 docker build -t mcp-agent-toolkit:check .   # when Dockerfile/compose changed
 ```
 
@@ -51,6 +54,25 @@ behind env vars and never run in CI.
   transport and the CLI event stream.
 - No secrets in code, tests, fixtures, commits, or docs — `.env` is
   gitignored; check `git status` before committing.
+
+## How to change a prompt (always through the registry)
+
+Never edit a promoted YAML in place — prompts are versioned artifacts:
+
+1. **Author a candidate** — write the new template to a file, then
+   `uv run python -m scripts.prompts_cli candidate agent_system --file
+   <file> --description "<what changed>"` (or
+   `POST /api/prompts/agent_system/candidates` with
+   `ENABLE_PROMPT_ADMIN=1`). Templates are *data*: schema-validated,
+   size-capped, rejected if they contain key-looking strings.
+2. **Measure** — `… prompts_cli ab agent_system --candidate <v>` runs the
+   live A/B gate (real model + judge) and records the result. Offline
+   runs are mechanics smoke only and can never promote.
+3. **Promote or roll back** — `… prompts_cli promote agent_system
+   --version <v>` / `rollback agent_system --to-version <v> --reason
+   "…"`. Every mutation lands in the hash-chained audit log
+   (`data/prompt-registry/audit.jsonl`); `… prompts_cli audit` verifies
+   the chain. Inspect any version with `show` / `diff` first.
 
 ## How to add a tool
 
