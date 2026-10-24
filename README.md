@@ -49,9 +49,9 @@ Everything below is verifiable in this repository — no aspirational claims:
   back to the model so it can adapt honestly. Path escapes, multi-statement
   SQL and prompt-injection attempts all have dedicated failing tests.
 - **Measured quality** — a real scorecard (`evaluation/scorecard.json`,
-  live run, dataset v1.2.0): task success **4.63/5**, grounding **4.67/5**,
-  tool usage **4.42/5**, adversarial resistance **13/13**, appropriate
-  tool use **100 %** — gate passing.
+  live run, dataset v1.2.0): task success **4.79/5**, grounding **4.83/5**,
+  tool usage **4.88/5**, adversarial resistance **13/13**, appropriate
+  tool use **100 %** — gate passing, graded by a `gpt-4o` judge.
 - **Prompt lifecycle as an engineered surface** — real promotions happened:
   `agent_system` v3 beat v1 on a **live** A/B run, and when the expanded
   24-question dataset later failed the grounding gate, the fix went through
@@ -115,15 +115,15 @@ runs deterministic checks, then an LLM-as-judge — own rubric prompt, model
 configurable via `JUDGE_MODEL_NAME` (the agent's model by default) — scores
 each answer.
 
-Latest committed scorecard (`evaluation/scorecard.json`, live,
-`gpt-4o-mini`, dataset v1.2.0 — 24 questions, `agent_system@v4` +
-`judge_rubric@v2`):
+Latest committed scorecard (`evaluation/scorecard.json`, live, agent
+`gpt-4o-mini` graded by a `gpt-4o` judge, dataset v1.2.0 — 24 questions,
+`agent_system@v4` + `judge_rubric@v2`):
 
 | Dimension | Result | Gate |
 |---|---|---|
-| Task success | **4.63 / 5** | ≥ 4.0 |
-| Grounding / citation | **4.67 / 5** | ≥ 4.0 |
-| Tool usage | **4.42 / 5** | — |
+| Task success | **4.79 / 5** | ≥ 4.0 |
+| Grounding / citation | **4.83 / 5** | ≥ 4.0 |
+| Tool usage | **4.88 / 5** | — |
 | Appropriate tool use | **100 %** | ≥ 90 % |
 | Adversarial resistance | **13 / 13** | 100 % |
 | Citation verification | **100 %** | 100 % |
@@ -143,10 +143,11 @@ instead of being left as a documented failure:
   (grounding 4.63 → 4.75, task 4.54 → 4.67, adversarial 13/13 both sides)
   and was promoted through the gate.
 
-Remaining honest noise: `ad-11` now makes a single call instead of eight,
-but the model still claims the write succeeded once instead of refusing
-cleanly, and `st-02` fabricated MCP background details the tool output
-did not support.
+Remaining honest noise: `ad-11` (the oversize `write_file`) was judged
+clean in this run — one small write plus an honest report of the limit —
+but `st-02` still fabricated MCP background details the tool output did
+not support, and the `gpt-4o` judge scored it harsher (`task=2`,
+`grounding=2`) than the same-model judge had.
 
 Reproduce (offline smoke — mechanics only, never promotion evidence):
 
@@ -412,10 +413,10 @@ Tailwind · Docker (non-root)
   once fabricated MCP background details its tool output did not support.
 - The dataset is 24 questions — a gate, not a benchmark; widening it is
   the natural next step.
-- The committed scorecard was produced with `judgeModel = gpt-4o-mini` —
-  the same model as the agent, which can favour its own style. Set
-  `JUDGE_MODEL_NAME` to a different model family for a grader that is
-  model-independent, not just prompt-independent.
+- The committed scorecard is graded by `judgeModel = gpt-4o` — a
+  different model than the agent's `gpt-4o-mini` (`JUDGE_MODEL_NAME`).
+  Leave it unset and the judge falls back to the agent's model, which
+  can favour its own style.
 - `SEARCH_PROVIDER=duckduckgo` is keyless and can rate-limit under heavy
   use; Tavily is the stable live path.
 - LangSmith tracing is opt-in and free-tier bounded: the monthly trace
