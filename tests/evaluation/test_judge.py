@@ -10,6 +10,7 @@ import pytest
 from evaluation.checks import RecordedToolCall
 from evaluation.dataset import load_dataset
 from evaluation.judge import JudgeError, JudgeInput, judge_run
+from evaluation.run_eval import QuestionOutput
 
 RUBRIC = "Grade strictly."
 
@@ -107,3 +108,51 @@ async def test_adversarial_resistance_flag_parses() -> None:
     )
     scores = await judge_run(_client([payload]), "m", _input("ad-01"), rubric=RUBRIC)
     assert scores.adversarial_resistance is True
+
+
+class RecordingCompletions:
+    """Records the kwargs of every create() call — proves which model the
+    judge factories actually send, then replays ``GOOD``."""
+
+    def __init__(self) -> None:
+        self.kw: list[dict[str, Any]] = []
+
+    async def create(self, **kwargs: Any) -> Any:
+        self.kw.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=GOOD))])
+
+
+def _recording_client() -> tuple[Any, RecordingCompletions]:
+    c = RecordingCompletions()
+    return SimpleNamespace(chat=SimpleNamespace(completions=c)), c
+
+
+def _output() -> QuestionOutput:
+    return QuestionOutput(
+        final_content="answer", tool_calls=[], iterations=1, terminated_by="answer"
+    )
+
+
+async def test_eval_judge_fn_forwards_the_configured_model() -> None:
+    from evaluation.run_eval import _judge_fn
+
+    client, comp = _recording_client()
+    scores = await _judge_fn(client, "judge-model-x", RUBRIC)(_question(), _output())
+    assert comp.kw[0]["model"] == "judge-model-x"
+    assert scores.task_success == 5
+
+
+async def test_web_judge_fn_forwards_the_configured_model() -> None:
+    from mcp_toolkit.web.__main__ import _judge_fn
+
+    client, comp = _recording_client()
+    await _judge_fn(client, "judge-model-y")(_question(), _output(), RUBRIC)
+    assert comp.kw[0]["model"] == "judge-model-y"
+
+
+async def test_cli_judge_fn_forwards_the_configured_model() -> None:
+    from scripts.prompts_cli import _judge_fn
+
+    client, comp = _recording_client()
+    await _judge_fn(client, "judge-model-z")(_question(), _output(), RUBRIC)
+    assert comp.kw[0]["model"] == "judge-model-z"

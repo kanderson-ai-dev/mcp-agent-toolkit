@@ -19,7 +19,7 @@ import contextlib
 import json
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,7 +47,12 @@ from mcp_toolkit.client.llm.stub_llm import StubLLM
 from mcp_toolkit.client.llm.types import LLMClient, OpenAIToolDef, TokenUsage
 from mcp_toolkit.client.mcp_client import McpAgentClient, ToolInvoker, server_env
 from mcp_toolkit.client.server_spawn import resolve_server_spawn
-from mcp_toolkit.config import Settings, get_settings, load_env_file
+from mcp_toolkit.config import (
+    Settings,
+    effective_judge_model,
+    get_settings,
+    load_env_file,
+)
 from mcp_toolkit.observability.logging import configure_logging, get_logger
 from mcp_toolkit.observability.pricing import parse_price_overrides, price_per_mtok
 from mcp_toolkit.prompts.loader import LoadedPrompt, load_prompt
@@ -300,6 +305,29 @@ def summarize(entries: list[ScorecardEntry], judged: bool) -> Aggregate:
 
 
 JudgeFn = Any  # async (EvalQuestion, QuestionOutput) -> JudgeScores
+
+
+def _judge_fn(
+    client: Any, model: str, rubric: str
+) -> Callable[[EvalQuestion, QuestionOutput], Awaitable[JudgeScores]]:
+    """The judge closure for one run — ``model`` comes from
+    ``effective_judge_model`` so the grader's model is an explicit,
+    recorded choice (never silently the agent's)."""
+
+    async def fn(q: EvalQuestion, o: QuestionOutput) -> JudgeScores:
+        return await judge_run(
+            client,
+            model,
+            JudgeInput(
+                question=q,
+                final_answer=o.final_content,
+                tool_calls=o.tool_calls,
+                terminated_by=o.terminated_by,
+            ),
+            rubric=rubric,
+        )
+
+    return fn
 
 
 async def _judge_or_error(
@@ -559,6 +587,7 @@ async def _run_langsmith_experiment(
             metadata={
                 "datasetVersion": dataset.version,
                 "model": settings.chat_model_name,
+                "judgeModel": effective_judge_model(settings),
                 "harness": "evaluation/run_eval.py",
                 "agentSystemPromptVersion": deps.agent_prompt.version,
                 "agentSystemPromptSha256": deps.agent_prompt.sha256,
@@ -667,6 +696,7 @@ async def _main() -> int:
         else:
             print(
                 f"eval mode: LIVE (model={settings.chat_model_name}, "
+                f"judge={effective_judge_model(settings)}, "
                 f"langsmith={'on' if langsmith_active else 'off'})"
             )
 
@@ -722,20 +752,9 @@ async def _main() -> int:
                 except ImportError:
                     pass
 
-            async def judge_fn(
-                q: EvalQuestion, o: QuestionOutput, _c: Any = judge_client
-            ) -> JudgeScores:
-                return await judge_run(
-                    _c,
-                    settings.chat_model_name,
-                    JudgeInput(
-                        question=q,
-                        final_answer=o.final_content,
-                        tool_calls=o.tool_calls,
-                        terminated_by=o.terminated_by,
-                    ),
-                    rubric=judge_prompt.template,
-                )
+            judge_fn = _judge_fn(
+                judge_client, effective_judge_model(settings), judge_prompt.template
+            )
 
         entries: list[ScorecardEntry] = []
         langsmith_experiment = False
@@ -754,7 +773,7 @@ async def _main() -> int:
         ran_at=datetime.now(UTC),
         mode="offline-smoke" if offline else "live",
         model="stub" if offline else settings.chat_model_name,
-        judge_model=None if offline else settings.chat_model_name,
+        judge_model=None if offline else effective_judge_model(settings),
         langsmith_experiment=langsmith_experiment,
         aggregate=summary,
         prompts={

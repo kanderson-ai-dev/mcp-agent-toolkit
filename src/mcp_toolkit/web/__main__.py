@@ -14,7 +14,7 @@ import importlib.util
 import sys
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 from fastapi import FastAPI
@@ -22,7 +22,12 @@ from fastapi import FastAPI
 from mcp_toolkit.client.llm import create_llm
 from mcp_toolkit.client.mcp_client import McpAgentClient, server_env
 from mcp_toolkit.client.server_spawn import resolve_server_spawn
-from mcp_toolkit.config import Settings, get_settings, load_env_file
+from mcp_toolkit.config import (
+    Settings,
+    effective_judge_model,
+    get_settings,
+    load_env_file,
+)
 from mcp_toolkit.observability.logging import configure_logging, get_logger
 from mcp_toolkit.observability.metrics import create_metrics
 from mcp_toolkit.observability.pricing import parse_price_overrides, price_per_mtok
@@ -32,6 +37,34 @@ from mcp_toolkit.server.streamable import is_loopback_host
 from mcp_toolkit.web.ab_runs import AbRunManager
 from mcp_toolkit.web.app import WebDeps, create_app
 from mcp_toolkit.web.prompts_routes import PromptAPIDeps
+
+if TYPE_CHECKING:
+    from evaluation.judge import JudgeScores
+
+    from mcp_toolkit.prompts.ab_test import RubricJudge
+
+
+def _judge_fn(client: Any, model: str) -> RubricJudge:
+    """Rubric judge bound to ``model`` — ``effective_judge_model``'s output
+    goes here so the grader's model is an explicit, recorded choice. The
+    ``evaluation`` imports stay lazy so the adapter boots without them."""
+
+    async def fn(q: Any, o: Any, rubric: str) -> JudgeScores:
+        from evaluation.judge import JudgeInput, judge_run
+
+        return await judge_run(
+            client,
+            model,
+            JudgeInput(
+                question=q,
+                final_answer=o.final_content,
+                tool_calls=o.tool_calls,
+                terminated_by=o.terminated_by,
+            ),
+            rubric=rubric,
+        )
+
+    return fn
 
 
 def _utf8_streams() -> None:
@@ -163,8 +196,7 @@ async def _run_ab(
     OpenAI for both the agent and the judge."""
     try:
         from evaluation.dataset import load_dataset
-        from evaluation.judge import JudgeInput, JudgeScores, judge_run
-        from evaluation.run_eval import EvalDeps, QuestionOutput
+        from evaluation.run_eval import EvalDeps
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             "A/B evaluation needs the top-level evaluation/ package — run "
@@ -173,7 +205,7 @@ async def _run_ab(
 
     from mcp_toolkit.client.llm.stub_llm import StubLLM
     from mcp_toolkit.client.llm.types import LLMClient, OpenAIToolDef
-    from mcp_toolkit.prompts.ab_test import ABMode, ABResult, RubricJudge, run_ab
+    from mcp_toolkit.prompts.ab_test import ABMode, ABResult, run_ab
 
     openai_tools: list[OpenAIToolDef] = tools
     judge: RubricJudge | None = None
@@ -203,23 +235,7 @@ async def _run_ab(
             timeout=60.0,
         )
         mode = "live"
-
-        async def judge_fn(
-            q: Any, o: QuestionOutput, rubric: str, _c: Any = judge_client
-        ) -> JudgeScores:
-            return await judge_run(
-                _c,
-                settings.chat_model_name,
-                JudgeInput(
-                    question=q,
-                    final_answer=o.final_content,
-                    tool_calls=o.tool_calls,
-                    terminated_by=o.terminated_by,
-                ),
-                rubric=rubric,
-            )
-
-        judge = judge_fn
+        judge = _judge_fn(judge_client, effective_judge_model(settings))
 
     agent_prompt = load_prompt(
         "agent_system", settings.prompt_version_agent_system, registry=registry

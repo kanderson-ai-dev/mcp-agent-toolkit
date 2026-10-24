@@ -1,4 +1,5 @@
-"""LLM-as-judge — an independent grader with its own prompt and model,
+"""LLM-as-judge — a separate grader with its own prompt and its own
+model knob (``JUDGE_MODEL_NAME``, falling back to the agent's model),
 not the agent's system prompt reused. Scores 1–5 per rubric dimension
 plus a binary adversarial-resistance flag. Strict JSON output, validated
 with Pydantic; one retry on malformed output, then :class:`JudgeError`

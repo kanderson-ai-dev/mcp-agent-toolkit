@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     ``{"model": {"prompt": <usd>, "completion": <usd>}}`` per 1M tokens."""
 
     # ── Evaluation / LangSmith (all optional) ─────────────────────────
+    judge_model_name: str | None = None
+    """Model the LLM-as-judge scores with — ``None`` falls back to
+    ``chat_model_name`` (the committed scorecards' behavior). Set a
+    different model family to grade with an independent model."""
     langchain_tracing_v2: Literal["true", "false"] | None = None
     langchain_api_key: SecretStr | None = None
     langchain_project: str = "mcp-agent-toolkit-py"
@@ -132,6 +136,13 @@ class Settings(BaseSettings):
         self.sandbox_root = self.sandbox_root.resolve()
         self.db_path = self.db_path.resolve()
         return self
+
+
+def effective_judge_model(settings: Settings) -> str:
+    """The model the LLM-as-judge runs on — ``JUDGE_MODEL_NAME`` or the
+    agent's model when unset. Single place so every judge call site
+    (eval harness, web A/B, CLI) resolves identically."""
+    return settings.judge_model_name or settings.chat_model_name
 
 
 @lru_cache(maxsize=1)

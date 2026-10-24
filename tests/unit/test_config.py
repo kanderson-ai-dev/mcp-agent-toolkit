@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from mcp_toolkit.config import get_settings, load_env_file
+from mcp_toolkit.config import effective_judge_model, get_settings, load_env_file
 from tests.helpers import make_settings
 
 pytestmark = pytest.mark.usefixtures("clean_env")
@@ -86,6 +86,30 @@ class TestDefaults:
     def test_max_tool_iterations_capped_at_50(self) -> None:
         with pytest.raises(ValidationError):
             make_settings(max_tool_iterations=51)
+
+
+class TestJudgeModel:
+    def test_default_falls_back_to_the_agent_model(self) -> None:
+        s = make_settings()
+        assert s.judge_model_name is None
+        assert effective_judge_model(s) == "gpt-4o-mini"
+
+    def test_env_override_grades_with_an_independent_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JUDGE_MODEL_NAME", "gpt-4o")
+        s = make_settings(chat_model_name="agent-m")
+        assert effective_judge_model(s) == "gpt-4o"
+
+    def test_empty_env_falls_back_to_the_agent_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("JUDGE_MODEL_NAME", "   ")
+        s = make_settings()
+        assert s.judge_model_name is None
+        assert effective_judge_model(s) == s.chat_model_name
+
+    def test_explicit_constructor_value_wins(self) -> None:
+        s = make_settings(chat_model_name="agent-m", judge_model_name="judge-m")
+        assert effective_judge_model(s) == "judge-m"
 
 
 class TestSecretHygiene:

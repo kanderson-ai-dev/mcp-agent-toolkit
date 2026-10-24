@@ -35,12 +35,17 @@ from evaluation.run_eval import EvalDeps, QuestionOutput  # noqa: E402
 from mcp_toolkit.client.llm.stub_llm import StubLLM  # noqa: E402
 from mcp_toolkit.client.mcp_client import McpAgentClient, server_env  # noqa: E402
 from mcp_toolkit.client.server_spawn import resolve_server_spawn  # noqa: E402
-from mcp_toolkit.config import Settings, get_settings, load_env_file  # noqa: E402
+from mcp_toolkit.config import (  # noqa: E402
+    Settings,
+    effective_judge_model,
+    get_settings,
+    load_env_file,
+)
 from mcp_toolkit.observability.pricing import (  # noqa: E402
     parse_price_overrides,
     price_per_mtok,
 )
-from mcp_toolkit.prompts.ab_test import ABResult, run_ab  # noqa: E402
+from mcp_toolkit.prompts.ab_test import ABResult, RubricJudge, run_ab  # noqa: E402
 from mcp_toolkit.prompts.errors import PromptRegistryError  # noqa: E402
 from mcp_toolkit.prompts.loader import LoadedPrompt  # noqa: E402
 from mcp_toolkit.prompts.registry import PromptRegistry  # noqa: E402
@@ -59,6 +64,26 @@ def _loaded(artifact: PromptArtifact) -> LoadedPrompt:
         sha256=artifact.sha256,
         template=artifact.template,
     )
+
+
+def _judge_fn(client: Any, model: str) -> RubricJudge:
+    """Rubric judge bound to ``model`` — ``effective_judge_model``'s output
+    goes here so the grader's model is an explicit, recorded choice."""
+
+    async def fn(q: EvalQuestion, o: QuestionOutput, rubric: str) -> JudgeScores:
+        return await judge_run(
+            client,
+            model,
+            JudgeInput(
+                question=q,
+                final_answer=o.final_content,
+                tool_calls=o.tool_calls,
+                terminated_by=o.terminated_by,
+            ),
+            rubric=rubric,
+        )
+
+    return fn
 
 
 def _print_artifact(a: PromptArtifact) -> None:
@@ -158,23 +183,7 @@ async def _run_ab_live_or_smoke(
                 timeout=60.0,
             )
             mode = "live"
-
-            async def judge_fn(
-                q: EvalQuestion, o: QuestionOutput, rubric: str, _c: Any = judge_client
-            ) -> JudgeScores:
-                return await judge_run(
-                    _c,
-                    settings.chat_model_name,
-                    JudgeInput(
-                        question=q,
-                        final_answer=o.final_content,
-                        tool_calls=o.tool_calls,
-                        terminated_by=o.terminated_by,
-                    ),
-                    rubric=rubric,
-                )
-
-            judge = judge_fn
+            judge = _judge_fn(judge_client, effective_judge_model(settings))
 
         reg = _registry(settings)
         agent_prompt = _loaded(reg.get_promoted("agent_system"))

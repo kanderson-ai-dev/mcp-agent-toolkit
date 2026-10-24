@@ -4,7 +4,7 @@
 > server exposing four guarded tools, an agent client that discovers and calls
 > them over stdio, a versioned Prompt Registry with a measured A/B gate, and a
 > web console that streams every step live. Quality is measured, not claimed —
-> dataset, deterministic checks, and an independent LLM-as-judge scorecard.
+> dataset, deterministic checks, and a separately-prompted LLM-as-judge scorecard.
 
 [![Python](https://img.shields.io/badge/python-≥3.11-blue)](pyproject.toml)
 [![MCP](https://img.shields.io/badge/MCP%20SDK-≥2.3-purple)](pyproject.toml)
@@ -34,8 +34,8 @@ inside an agentic system — not a thin wrapper around an LLM:
   artifacts; promotion is gated by a real A/B evaluation and every mutation
   lands in a hash-chained audit log.
 - An **evaluation harness** turns quality into a gate: a 24-question dataset
-  (13 adversarial), deterministic checks, and an independent judge produce a
-  scorecard a prompt must beat to promote.
+  (13 adversarial), deterministic checks, and a judge with its own rubric
+  prompt produce a scorecard a prompt must beat to promote.
 
 ## 💡 Why this matters — for your project, or for a technical reviewer
 
@@ -111,7 +111,9 @@ flowchart LR
 
 Quality regresses like a failing test. `evaluation/run_eval.py` drives the
 dataset through the real agent (live mode: real OpenAI + real MCP transport),
-runs deterministic checks, then an independent LLM judge scores each answer.
+runs deterministic checks, then an LLM-as-judge — own rubric prompt, model
+configurable via `JUDGE_MODEL_NAME` (the agent's model by default) — scores
+each answer.
 
 Latest committed scorecard (`evaluation/scorecard.json`, live,
 `gpt-4o-mini`, dataset v1.2.0 — 24 questions, `agent_system@v4` +
@@ -318,6 +320,7 @@ for you — the published port stays loopback-only on the host.
 |---|---|---|
 | `OPENAI_API_KEY` | — | Live LLM; absent ⇒ deterministic `StubLLM` |
 | `CHAT_MODEL_NAME` | `gpt-4o-mini` | OpenAI model |
+| `JUDGE_MODEL_NAME` | = agent model | LLM-as-judge model — set a different one for an independent grader |
 | `LLM_PROVIDER` | `auto` | `auto` · `openai` · `stub` |
 | `SEARCH_PROVIDER` | `auto` | `auto` · `tavily` · `duckduckgo` · `none` |
 | `SEARCH_API_KEY` | — | Tavily key |
@@ -409,6 +412,10 @@ Tailwind · Docker (non-root)
   once fabricated MCP background details its tool output did not support.
 - The dataset is 24 questions — a gate, not a benchmark; widening it is
   the natural next step.
+- The committed scorecard was produced with `judgeModel = gpt-4o-mini` —
+  the same model as the agent, which can favour its own style. Set
+  `JUDGE_MODEL_NAME` to a different model family for a grader that is
+  model-independent, not just prompt-independent.
 - `SEARCH_PROVIDER=duckduckgo` is keyless and can rate-limit under heavy
   use; Tavily is the stable live path.
 - LangSmith tracing is opt-in and free-tier bounded: the monthly trace

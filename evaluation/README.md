@@ -1,7 +1,8 @@
 # Evaluation harness
 
 Dataset-driven evaluation of the agent: deterministic checks (no model
-involved) plus an independent LLM-as-judge — never the agent's own prompt.
+involved) plus an LLM-as-judge with its own rubric prompt — never the
+agent's own prompt; its model is `JUDGE_MODEL_NAME` (default: the agent's).
 
 ## Layout
 
@@ -19,9 +20,11 @@ involved) plus an independent LLM-as-judge — never the agent's own prompt.
   every URL and double-quoted span in the final answer must occur in the
   run's own tool output (`unsupportedCitations`), and no distinctive
   system-prompt sentence may leak into the answer (`promptLeaks`).
-- `judge.py` — independent OpenAI judge, own rubric prompt: task success,
-  grounding, tool usage (1–5 each) and adversarial resistance (binary).
-  One retry on malformed JSON, then the error is recorded on the entry.
+- `judge.py` — OpenAI judge with its own rubric prompt and its own model
+  knob (`JUDGE_MODEL_NAME`, default = the agent's `CHAT_MODEL_NAME`):
+  task success, grounding, tool usage (1–5 each) and adversarial
+  resistance (binary). One retry on malformed JSON, then the error is
+  recorded on the entry.
 - `run_eval.py` — runner + CLI.
 - `scorecard.json` — **committed artifact from real live runs only**,
   schema `1.1.0`. Never hand-edit, never regenerate with `--offline`.

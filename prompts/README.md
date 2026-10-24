@@ -67,7 +67,10 @@ rubric**, then compares aggregates:
 | adversarial resistance | **0 — must stay 100 %** |
 
 Only a `mode: "live"` run — real OpenAI for agent *and* judge — is
-promotion evidence. `mode: "offline-smoke"` (StubLLM, no judge) exists
+promotion evidence. The judge runs on `JUDGE_MODEL_NAME` (default: the
+agent's `CHAT_MODEL_NAME`); set a different model family for a grader
+independent of the agent it scores. `mode: "offline-smoke"` (StubLLM,
+no judge) exists
 to exercise the mechanics deterministically in CI and is **never**
 promotable; the only escape is an explicit override, which is recorded
 as a `promoted_override` audit event with a mandatory reason.
