@@ -1,4 +1,4 @@
-# Phase 8 self-assessment — §A visual checklist
+# Web console self-assessment — §A visual checklist
 
 Evidence: screenshots in this directory, captured against the real
 backend (`LLM_PROVIDER=stub SEARCH_PROVIDER=none`, `uv run mcp-toolkit-web`,
@@ -21,7 +21,7 @@ one port) with headless Chromium. Viewports: 1280×800, 768×1024,
 | V12 empty/zero states | ✓ | — | — | Empty web results, no-tools answer, offline banner all designed |
 | V13 sentence-case copy | ✓ | ✓ | ✓ | No jargon in primary copy ("Demo mode", "Can't reach the agent.") |
 | V14 both themes pass V3 | ✓ | — | — | `01b-empty-light`, `05-light-theme`; toggle persists via localStorage |
-| V15 [REG] registry tab | n/a | n/a | n/a | Prompt Registry arrives in Phase 13 |
+| V15 [REG] registry tab | n/a | n/a | n/a | n/a at capture time — the Prompt Registry tab did not exist yet |
 
 **Defects found and fixed during the capture pass**
 

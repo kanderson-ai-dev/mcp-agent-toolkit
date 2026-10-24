@@ -1,4 +1,4 @@
-"""Phase 0 smoke test — the skeleton imports and the oracle fixtures parse."""
+"""Bootstrap smoke test — the skeleton imports and the oracle fixtures parse."""
 
 from __future__ import annotations
 

@@ -25,27 +25,28 @@ ADR-4).
 oracle fixtures and a contract test. Fixes for frontend drift go in the
 backend, never the frontend.
 
-## ADR-2 — `FastMCP` high-level API vs low-level `Server`
+## ADR-2 — `MCPServer` high-level API vs low-level `Server`
 
 **Context.** The official `mcp` Python SDK offers a low-level `Server`
-class (manual request handlers) and the high-level `FastMCP` API
-(declarative `@mcp.tool()` registration, stdio runner built in).
+class (manual request handlers) and the high-level `MCPServer` API
+(`mcp.server.mcpserver` — the SDK's batteries-included server class,
+declarative `@server.tool()` registration, stdio runner built in;
+earlier SDK releases exposed the same class as `FastMCP`).
 
-**Decision.** `FastMCP`. The four tools are registered through one
+**Decision.** `MCPServer`. The four tools are registered through one
 `ToolDefinition` abstraction wrapped by a single middleware (request-id
 binding, rate limit, timing, structured log, metrics, sanitization,
 `ToolError` → error envelope with `isError=true`).
 
 **Alternatives.** Low-level `Server`: more control over `_meta` access
-and result shaping, but re-implements what `FastMCP` already does well
-and drifts from the mainstream SDK usage reviewers expect.
+and result shaping, but re-implements what `MCPServer` already does
+well and drifts from the mainstream SDK usage reviewers expect.
 
-**Consequences.** A Phase-3 spike test pins how `isError`, request
-`_meta` and stdout behave in the installed SDK version; findings are
-recorded here (see *Spike notes* below once landed). If `FastMCP`
-cannot propagate `_meta` on `tools/call`, fall back to a raw
-`CallToolRequest` on the client side and/or a low-level handler —
-recorded in the spike.
+**Consequences.** The `mcp` SDK spike pinned how `isError`, request
+`_meta` and stdout behave in the installed version — findings in
+*Spike notes* below. `_meta` propagates on `tools/call` through
+`ctx.request_context.meta`, so the client-side `CallToolRequest`
+fallback was never needed.
 
 ## ADR-3 — No LangChain/LangGraph in the agent loop
 
@@ -185,8 +186,18 @@ instance. Memory backend unchanged and still the default.
 
 ## Spike notes (to be filled as phases land)
 
-- *Phase 3.1 (`mcp` SDK):* pending — will record `isError` production,
-  request `_meta` access from a tool handler, and stdout purity.
+- *`mcp` SDK, tool-call plumbing:* `isError` is produced by returning
+  `CallToolResult(is_error=True)` from the handler — the middleware
+  sets `is_error=isinstance(envelope, ErrEnvelope)`
+  (`server/invocation.py`), pinned by `test_error_envelopes_not_protocol_errors`
+  and `test_unknown_tool_is_iserror_result` in `tests/integration/test_mcp_stdio.py`.
+  The client's `params._meta.requestId` reaches the handler via
+  `ctx.request_context.meta` (`extract_request_id`, `server/invocation.py`),
+  pinned by `test_request_id_propagates_via_meta` — the documented
+  low-level `Server` fallback was never needed. Stdout purity holds by
+  construction (all logging to stderr, `server/__main__.py`) and is
+  proven by the suite itself: every `test_mcp_stdio.py` test parses the
+  child's stdout as JSON-RPC — a stray byte would break it.
 
 - *Phase 16 (`mcp` SDK 2.x, structured output):* `Annotated[CallToolResult,
   X]` publishes `X`'s schema as `outputSchema` **and** validates a manually

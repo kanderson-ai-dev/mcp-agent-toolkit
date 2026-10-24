@@ -1,4 +1,4 @@
-"""The ten UI-QA queries — single source of truth for Phase 17.
+"""The ten UI-QA queries — single source of truth for the UI-QA suite.
 
 Each query is verbatim the dataset prompt it maps to (the sync guard at
 module scope fails loudly when the dataset drifts). `expected` carries

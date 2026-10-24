@@ -379,7 +379,7 @@ Every gate is reproducible locally and enforced in CI:
 ```bash
 uv run ruff check . && uv run ruff format --check .
 uv run mypy --strict src
-uv run pytest -q --cov=src --cov-branch --cov-fail-under=92   # 492 tests
+uv run pytest -q --cov=src --cov-branch --cov-fail-under=92   # 517 tests
 uv run python -m evaluation.run_eval --offline                # harness smoke
 uv run pytest tests/e2e -q                                    # 54 Playwright tests
 npm --prefix frontend run lint && npm --prefix frontend run typecheck
@@ -388,7 +388,7 @@ uv run pip-audit -r requirements.txt
 gitleaks detect --no-banner
 ```
 
-492 backend tests (92.9 % branch coverage) · 54 Playwright e2e · 55 Vitest —
+517 backend tests (92.98 % branch coverage) · 54 Playwright e2e · 55 Vitest —
 all offline and deterministic; live tests are opt-in via `RUN_LIVE_TESTS=1`.
 
 ## 🛠️ Stack

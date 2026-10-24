@@ -4,7 +4,7 @@
 
 - Python ≥ 3.11 (3.12 recommended) and [`uv`](https://docs.astral.sh/uv/)
 - Docker — only for the container build
-- Node.js ≥ 20 — only for the React console (a later phase)
+- Node.js ≥ 20 — for the React console (`frontend/`)
 
 ## Setup
 

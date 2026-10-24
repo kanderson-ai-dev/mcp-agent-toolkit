@@ -1,4 +1,4 @@
-"""Metrics + observability-contract tests (Phase 5).
+"""Metrics + observability-contract tests.
 
 Every case builds a fresh ``Metrics`` on its own registry — no global
 state leaks between tests. Covers counter semantics, histogram-derived

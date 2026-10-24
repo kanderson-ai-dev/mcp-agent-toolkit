@@ -1,4 +1,4 @@
-"""Phase-17 UI-QA capture — screenshots + automated visual checks.
+"""UI-QA capture — screenshots + automated visual checks of the console.
 
 Boots the production console (`python -m mcp_toolkit.web`, offline stack),
 runs each `tests/e2e/ui_qa_queries.py` query at its required viewports and

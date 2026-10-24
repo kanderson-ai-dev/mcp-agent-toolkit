@@ -47,13 +47,17 @@ Additional notes:
   contract; a rejected call never consumes budget.
 - **Error envelopes, not exceptions** — guardrail rejections return
   `{status:"error",code}` (`invalid_input`, `forbidden`, `not_found`,
-  `rate_limited`, `upstream`, `internal`), so the model reacts to a
-  typed signal instead of a crash.
+  `rate_limited`, `too_large`, `upstream`, `internal`), so the model
+  reacts to a typed signal instead of a crash.
 - **Zero-leak CI** — the suite runs offline with `StubLLM` +
   `SEARCH_PROVIDER=none`; live credentials are opt-in env gates.
-- **Web console (planned)** — the FastAPI console is a local,
-  single-user adapter: not multi-tenant, not authenticated, not for
-  direct Internet exposure without an added auth layer.
+- **Web console** — the FastAPI console is a local, single-user
+  adapter: not multi-tenant, not authenticated, not for direct Internet
+  exposure without an added auth layer. It binds loopback by default
+  (`WEB_HOST=127.0.0.1`); `WEB_HOST=0.0.0.0` exists for containers and
+  logs a loud warning — publishing an unauthenticated console beyond
+  loopback is the operator's explicit choice, so keep published ports
+  loopback-only (`-p 127.0.0.1:3000:3000`).
 - **Prompt Registry mutations** — because the console is
   unauthenticated, every write (`candidates`, `ab-test`, `promote`,
   `rollback`) returns 403 unless `ENABLE_PROMPT_ADMIN=1` is set

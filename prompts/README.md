@@ -44,6 +44,8 @@ reach.
 | Env var | Values | Default |
 |---|---|---|
 | `PROMPT_REGISTRY_DIR` | registry root | `prompts` |
+| `PROMPT_AUDIT_PATH` | hash-chained audit log | `data/prompt-registry/audit.jsonl` |
+| `PROMPT_AB_RESULTS_DIR` | persisted A/B evidence | `data/prompt-registry/ab` |
 | `PROMPT_VERSION_AGENT_SYSTEM` | `latest-promoted` or a version number | `latest-promoted` |
 | `PROMPT_VERSION_JUDGE_RUBRIC` | same | `latest-promoted` |
 

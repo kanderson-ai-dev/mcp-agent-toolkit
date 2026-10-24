@@ -114,7 +114,7 @@ class Scorecard(_CamelModel):
     langsmith_experiment: bool = False
     thresholds: dict[str, float] = Field(default_factory=lambda: dict(THRESHOLDS))
     aggregate: Aggregate
-    # Filled by the Prompt Registry integration (Phase 11+); the field
-    # exists from schema 1.1.0 so scorecards are comparable over time.
+    # Filled by the Prompt Registry integration; the field exists from
+    # schema 1.1.0 so scorecards are comparable over time.
     prompts: dict[str, Any] = Field(default_factory=dict)
     results: list[ScorecardEntry]

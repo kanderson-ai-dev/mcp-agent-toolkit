@@ -360,7 +360,7 @@ async def test_metrics_record_tokens_and_cost() -> None:
     assert "agent_cost_usd_total" in text
 
 
-# ── token streaming + follow-up history (Phase 19) ────────────────────
+# ── token streaming + follow-up history ───────────────────────────────
 
 
 async def test_llm_deltas_become_answer_delta_events() -> None:
