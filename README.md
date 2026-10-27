@@ -83,6 +83,23 @@ pipeline with secret scanning. It is **not** claimed to be production-proven
 
 ---
 
+## 🧠 Why MCP — and Why No Agent Framework?
+
+The design choices below are recorded as ADRs in
+[`docs/DECISIONS.md`](docs/DECISIONS.md), each with the alternative that was
+rejected:
+
+| Decision | Choice | Why |
+|---|---|---|
+| Agent runtime (ADR-3) | A plain, bounded OpenAI tool-calling loop — **no LangChain, no LangGraph** | The point of MCP is that tools work with *any* client. A framework would hide exactly the loop, budget and termination logic this project wants to be explicit about. |
+| MCP server API (ADR-2) | High-level `MCPServer` with typed handlers | Annotations, `outputSchema`, resources and prompts come from the SDK instead of hand-rolled JSON-RPC; the real behaviour was verified with spike tests (`isError`, `_meta.requestId`, stdout purity). |
+| Wire format (ADR-5) | camelCase JSON on the wire, snake_case inside | The console contract stays stable and pinned by a contract test, while Python code stays idiomatic. |
+| SQLite access (ADR-7) | Synchronous `sqlite3` inside `asyncio.to_thread` | One read-only connection, no ORM, no async driver — the guardrail surface stays small enough to audit. |
+| Token streaming (ADR-8) | A synchronous `on_delta` callback | Deltas reach the SSE queue without making the LLM protocol async-generator shaped. |
+| Rate limiting (ADR-9) | In-memory by default, Redis behind the same `ToolLimiter` interface | Single-process users pay nothing; multi-process deployments opt in. |
+
+---
+
 ## 🏗️ Architecture
 
 ### System overview
@@ -191,6 +208,53 @@ graph TD
 
 ![Console — a three-tool run: database query, web search and file write, then the final answer with prompt version and telemetry](docs/ui-qa/q01-desktop.png)
 
+## 📋 Sample Interaction Preview
+
+Real request → response, captured from a running instance of this repository
+(offline `StubLLM`, so `costUsd` is `null`; a live run fills in tokens and
+cost):
+
+```bash
+curl -s -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Which reports cover security, and what is the newest one?"}'
+# -> 201 {"runId": "a413d6ac-2cd9-4d1a-a3e0-8a3aea64dec5"}
+
+curl -N "http://localhost:3000/api/chat/stream?runId=a413d6ac-2cd9-4d1a-a3e0-8a3aea64dec5"
+```
+
+```text
+event: tool_call
+data: {"type":"tool_call","iteration":1,"tool":"db_query","args":{"query":"SELECT id, title, topic, author, published_at FROM reports ORDER BY published_at DESC LIMIT 5"}, ...}
+
+event: tool_result
+data: {"type":"tool_result","iteration":1,"tool":"db_query","ok":true,"durationMs":107,"preview":"{ \"status\": \"ok\", \"data\": { \"rows\": [ ... ] } }", ...}
+
+event: answer_delta
+data: {"type":"answer_delta","iteration":2,"content":"Stub answer: gathered evidence "}
+
+event: final
+data: {"type":"final","iterations":2,"toolCalls":1,"terminatedBy":"answer","durationMs":108,
+       "usage":{"promptTokens":1109,"completionTokens":63,"totalTokens":1172},"costUsd":null,
+       "promptVersion":{"name":"agent_system","version":4,"sha256":"e2089a23b25b…"}, ...}
+```
+
+**A blocked request** — the guardrail rejects it with a typed error, the agent
+reports it, and nothing unsafe runs:
+
+```text
+event: tool_result
+data: {"type":"tool_result","tool":"read_file","ok":false,
+       "result":{"status":"error","code":"forbidden",
+                 "message":"Path escapes the sandbox root: ../../etc/passwd"}}
+
+event: final
+data: {"type":"final","content":"… the requested operation was rejected by the server's guardrails; nothing unsafe was executed. …","terminatedBy":"answer"}
+```
+
+Validation is enforced before any LLM call: a question shorter than 3
+characters returns `400 {"error":"Question must be at least 3 characters."}`.
+
 ---
 
 ## 📊 Evaluation-Driven Development (EDD)
@@ -200,6 +264,24 @@ dataset through the real agent (live mode: real OpenAI + real MCP transport),
 runs deterministic checks, then an LLM-as-judge — own rubric prompt, model
 configurable via `JUDGE_MODEL_NAME` (the agent's model by default) — scores
 each answer.
+
+### Project Goal & Definition of Success
+
+| Dimension | Metric | Success threshold | Latest result |
+|---|---|---|---|
+| Task success | Judge average (1–5) | ≥ 4.0 | **4.79** ✅ |
+| Grounding | Judge average (1–5) | ≥ 4.0 | **4.83** ✅ |
+| Safety | Adversarial cases resisted | 100 % | **13 / 13** ✅ |
+| Tool discipline | Questions with appropriate tool use | ≥ 90 % | **100 %** ✅ |
+| Citations | Citation-expecting rows verified against tool output | 100 % | **100 %** ✅ |
+| Cost | Average cost per question (`gpt-4o-mini`) | tracked, `RUN_BUDGET_USD` hard cap | **$0.00039** (whole 24-question run: **$0.0093**) |
+| Latency | Per-question wall clock | tracked, no gate | **p50 1.8 s · p95 13.1 s** ⚠️ (see limitations) |
+| Test coverage | `pytest --cov --cov-branch` | ≥ 92 % enforced | **92.98 %** ✅ |
+| Static typing | `mypy --strict src` | 0 errors | **0 errors** ✅ |
+| Supply chain | `gitleaks` full history · `pip-audit --strict` | 0 findings | **clean** ✅ |
+
+Thresholds live in one place — `evaluation/scorecard.py` — and a failed gate
+sets `passed: false`: quality is treated as a failing test, not a statistic.
 
 Latest committed scorecard (`evaluation/scorecard.json`, live, agent
 `gpt-4o-mini` graded by a `gpt-4o` judge, dataset v1.2.0 — 24 questions,
@@ -235,7 +317,9 @@ but `st-02` still fabricated MCP background details the tool output did
 not support, and the `gpt-4o` judge scored it harsher (`task=2`,
 `grounding=2`) than the same-model judge had.
 
-Reproduce (offline smoke — mechanics only, never promotion evidence):
+### Reproduce the Evaluation Scorecard
+
+Offline smoke — proves the harness mechanics run end to end, never promotion evidence:
 
 ```bash
 uv run python -m evaluation.run_eval --offline
@@ -325,28 +409,116 @@ mutation is a hash-chained `data/prompt-registry/audit.jsonl` entry —
 
 ![Audit timeline — hash-chained registry events](docs/ui-qa/registry/audit.png)
 
+## 🔏 Audit Log
+
+Every registry mutation — candidate created, A/B run, promotion, override,
+rollback — is appended to `data/prompt-registry/audit.jsonl` as one chained
+JSON line:
+
+```text
+hash = sha256( prevHash + canonical_json(event) )     # first link: prevHash = "0" × 64
+```
+
+```json
+{"prevHash": "0000…0000", "hash": "7b327d95afb4…", "type": "candidate_created",
+ "name": "agent_system", "version": 2, "author": "owner", "sha256": "84bf750efa36…", "description": "…"}
+```
+
+- **Tamper-evident:** `verify_chain()` (and `prompts_cli audit`) returns the
+  first line whose hash no longer matches. Editing any line, or deleting a line other than
+  the last, is detected.
+- **Never a secret store:** an event whose free text looks like a credential
+  (`sk-…`, `Bearer …`, key-shaped strings) is refused before it is written.
+- **Honest scope:** this is tamper-*evident*, not tamper-proof — there is no
+  signing key or external anchor, so someone who can rewrite the whole file can
+  recompute the chain, and truncating the tail is not detected.
+
 ## 🔌 API
 
-Four tools, advertised with honest `ToolAnnotations` and `outputSchema`s:
+**Web adapter** (`mcp-toolkit-web`, default `http://localhost:3000`):
 
-| Tool | What it does | Guardrails |
-|---|---|---|
-| `web_search` | Search via Tavily / DuckDuckGo / deterministic stub | rate limit, output cap, sanitized |
-| `db_query` | Read-only SQL against `demo.db` | single `SELECT`/`WITH` guard + `mode=ro` connection |
-| `read_file` | Read a file | sandbox containment, byte cap |
-| `write_file` | Write a file | sandbox containment, byte cap |
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/health` | Liveness probe — `{"status":"ok"}` |
+| `GET /api/status` | Mode (`live` / `stub`), tool count, active prompt versions, last evaluation summary |
+| `GET /api/tools` | The four tools **as discovered over MCP** — annotations and `outputSchema` included |
+| `POST /api/chat` | Validate a question (3–2 000 chars, optional bounded `history`) → `201 {runId}` |
+| `GET /api/chat/stream?runId=` | One-shot SSE stream: `tool_call`, `tool_result`, `answer_delta`, `final`, `error` |
+
+**Prompt Registry** (reads are open; mutations need `ENABLE_PROMPT_ADMIN=1`):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/prompts` · `/{name}` · `/{name}/{version}` | Versions, detail and a single artifact |
+| `GET /api/prompts/{name}/diff` | Rendered diff between two versions |
+| `POST /api/prompts/{name}/candidates` | Register a candidate → writes `vN+1.yaml` (`201`) |
+| `POST /api/prompts/{name}/ab-test` | Start a live A/B run (`202`) → `GET /api/prompts/ab/{run_id}/stream` (SSE) |
+| `GET /api/prompts/{name}/ab-result` | Latest persisted A/B evidence |
+| `POST /api/prompts/{name}/promote` | Promote — `409 no_ab_evidence` / `409 gate_failed` unless an audited `overrideReason` is given |
+| `POST /api/prompts/{name}/rollback` | Roll back to an earlier version (reason required) |
+| `GET /api/prompts/audit` | The hash-chained audit log |
+
+**MCP server** — speak the protocol directly (any MCP client works):
 
 ```bash
-# Speak MCP directly
-uv run mcp-toolkit-server            # stdio JSON-RPC on stdout
-
-# Run the agent
+uv run mcp-toolkit-server            # stdio JSON-RPC on stdout, logs on stderr
 uv run mcp-toolkit-agent "Which reports cover security?"
-uv run mcp-toolkit-agent --stub --json "…"   # offline, machine-readable
-
-# Web console
-uv run mcp-toolkit-web               # http://localhost:3000
+uv run mcp-toolkit-agent --stub --json "…"   # offline, machine-readable events
 ```
+
+### curl examples
+
+```bash
+# Health and discovery
+curl -s http://localhost:3000/api/health
+curl -s http://localhost:3000/api/status
+curl -s http://localhost:3000/api/tools
+
+# Ask a question, then stream the run
+curl -s -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What does the reports table say about observability?"}'
+curl -N "http://localhost:3000/api/chat/stream?runId=<runId>"
+
+# Registry (the POSTs need ENABLE_PROMPT_ADMIN=1)
+curl -s http://localhost:3000/api/prompts/agent_system
+curl -s "http://localhost:3000/api/prompts/agent_system/diff?from=3&to=4"
+curl -s -X POST http://localhost:3000/api/prompts/agent_system/promote \
+  -H "Content-Type: application/json" -d '{"version": 5}'     # 409 until a live A/B passes
+curl -s http://localhost:3000/api/prompts/audit
+```
+
+## ⚡ Performance & Cost
+
+Every `final` event carries `durationMs`, provider `usage` and `costUsd`
+computed from a committed price table (`MODEL_PRICING_JSON` overrides it):
+
+```text
+cost = prompt_tokens / 1M × input_price  +  completion_tokens / 1M × output_price
+```
+
+| Model | Input / 1M tokens | Output / 1M tokens |
+|---|---|---|
+| `gpt-4o-mini` (agent default) | $0.15 | $0.60 |
+| `gpt-4o` (judge in the committed scorecard) | $2.50 | $10.00 |
+| `gpt-4.1` · `gpt-4.1-mini` · `gpt-4.1-nano` · `o4-mini` | see `observability/pricing.py` | |
+
+Unknown models resolve to `null`, never a fabricated `$0`. Measured on the
+committed live run (24 questions, `agent_system@v4`):
+
+| Metric | Measured |
+|---|---|
+| Average tokens per question | 1 835 |
+| Average cost per question | **$0.00039** |
+| Cost of the entire 24-question run (agent only) | **$0.0093** |
+| Latency p50 / p95 / max | 1.8 s / 13.1 s / 26.9 s |
+| Average latency by category | ambiguous 2.0 s · adversarial 3.2 s · single-tool 3.9 s · error-recovery 6.6 s · **multi-tool 10.2 s** |
+| Termination | 24 / 24 `answer` — no `iteration_limit`, no `budget_limit` |
+
+Latency is **informational, not gated**. The tail is real: multi-tool
+questions chain several live calls, and the single slowest row (`ad-11`,
+26.9 s) is the oversize-`write_file` case. `RUN_BUDGET_USD` is a hard
+pre-call gate that terminates a run with `budget_limit` before it overspends.
 
 ## 📡 Observability & cost
 
@@ -460,6 +632,30 @@ for you — the published port stays loopback-only on the host.
 | `ENABLE_PROMPT_ADMIN` | off | Registry write endpoints |
 | `LANGCHAIN_TRACING_V2` | `false` | LangSmith tracing opt-in |
 
+## 🐳 Docker Deployment
+
+A three-stage image (Node builds the console → `uv` builds the locked venv →
+slim runtime) that runs as **UID 10001**, ships `evaluation/`, the prompt
+registry and the built console, and includes a `HEALTHCHECK`.
+
+```bash
+docker build -t mcp-agent-toolkit .
+docker compose up web            # console at http://localhost:3000 (host port is loopback-only)
+docker compose run --rm client   # one-shot scripted demo, offline StubLLM
+docker compose up server         # stdio MCP server for an external client
+```
+
+| Compose service | Command | Purpose |
+|---|---|---|
+| `web` | `python -m mcp_toolkit.web` | FastAPI adapter + React console, seeds the fixture DB into the `/data` volume on first run |
+| `client` | `python -m scripts.demo` | Spawns its own server over stdio, asks a question, prints the event stream |
+| `server` | `python -m mcp_toolkit.server` | The MCP server alone, metrics on a loopback port |
+
+Writable state lives only in the `/data` volume; the container never needs a
+`.env` and defaults to the offline stub. CI builds the image on every push and
+asserts: API answers, four tools discovered, console served, `evaluation/`
+shipped, non-root UID, prompt registry present.
+
 ## 🖥️ Frontend
 
 React 19 + Vite + TypeScript strict + Tailwind — a deliberately thin client:
@@ -516,6 +712,35 @@ gitleaks detect --no-banner
 517 backend tests (92.98 % branch coverage) · 54 Playwright e2e · 55 Vitest —
 all offline and deterministic; live tests are opt-in via `RUN_LIVE_TESTS=1`.
 
+CI (`.github/workflows/ci.yml`, five jobs on every push to `main` and every PR):
+
+| Job | What it enforces |
+|---|---|
+| `test` (Python 3.11 · 3.12 · 3.13) | `uv sync --frozen`, lockfile freshness, `ruff` check + format, `mypy --strict`, offline `pytest` with a 92 % branch-coverage gate |
+| `security` | `gitleaks` over full history, `requirements.txt` freshness against `uv.lock`, `pip-audit --strict` |
+| `frontend` | ESLint, `tsc` typecheck, Vitest, production build |
+| `e2e` | Playwright against the built console (54 tests, offline) |
+| `docker-smoke` | Builds the image, boots the web adapter, asserts API, tools, console, evaluation package, non-root UID and prompt registry |
+
+Live evaluations are never run in CI: they spend real money, so they stay
+manual and local, and a human commits the resulting scorecard.
+
+## ✅ Quality Assurance
+
+Committed checklists record the QA passes, so the claims above are
+inspectable rather than just asserted:
+
+- [`docs/functional-qa/CHECKLIST.md`](docs/functional-qa/CHECKLIST.md) —
+  scenario-by-scenario functional evidence against the real backend.
+- [`docs/ui-qa/CHECKLIST.md`](docs/ui-qa/CHECKLIST.md) — visual and layout
+  checks across three viewports and both themes, plus the automated content
+  rules (a forbidden-literal sweep after every query) that fail on leaked
+  internal identifiers, `undefined`/`NaN`, or `[object Object]`.
+- [`docs/ui-qa/DESIGN.md`](docs/ui-qa/DESIGN.md) and
+  [`docs/ui-qa/SELF-ASSESSMENT.md`](docs/ui-qa/SELF-ASSESSMENT.md) — design
+  rules and the self-assessment against them; the screenshots under
+  `docs/ui-qa/` are produced by `scripts/ui_qa.py` against the real backend.
+
 ## 🛠️ Stack
 
 Python ≥ 3.11 · `uv` · `mcp` SDK · OpenAI · FastAPI/uvicorn · pydantic v2 ·
@@ -535,6 +760,12 @@ Tailwind · Docker (non-root)
   misreports an oversize `write_file` as successful (one call now instead
   of eight — converged, but dishonest about the outcome), and `st-02`
   once fabricated MCP background details its tool output did not support.
+- Latency has no gate: p95 is 13.1 s on the committed live run and the
+  slowest row (`ad-11`) took 26.9 s; the tail comes from multi-tool chains and
+  large generated payloads, not from a fixed overhead.
+- The audit chain is tamper-*evident*, not tamper-proof (no signing key or
+  external anchor), and run ids are in-memory and single-use, so a process
+  restart drops pending runs.
 - The dataset is 24 questions — a gate, not a benchmark; widening it is
   the natural next step.
 - The committed scorecard is graded by `judgeModel = gpt-4o` — a
