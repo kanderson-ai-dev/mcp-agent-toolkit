@@ -262,8 +262,8 @@ uv run mcp-toolkit-web               # http://localhost:3000
   into system prompts (indirect-injection matrix is 13/13 in the dataset).
 - The console is local, single-user, unauthenticated — registry mutations
   additionally need `ENABLE_PROMPT_ADMIN=1`.
-- CI: `permissions: contents: read`, `pull_request` only; `live-eval.yml`
-  never runs on PRs; `pip-audit`, `gitleaks` full-history, Dependabot.
+- CI: `permissions: contents: read`; `pip-audit`, `gitleaks` full-history.
+  Live evaluations stay manual and local — no scheduled job spends credit.
 
 ## 🚀 Quick Start
 
