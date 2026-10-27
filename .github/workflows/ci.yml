@@ -67,9 +67,9 @@ jobs:
         run: uv sync --frozen
 
       - name: Requirements freshness
-        run: |
-          uv export --frozen --no-emit-project -o requirements.ci.txt
-          diff requirements.txt requirements.ci.txt
+        # Export to stdout: `-o` would embed the output filename in the
+        # generated header, which can never match the committed file.
+        run: uv export --frozen --no-emit-project | diff requirements.txt -
 
       - name: Dependency audit
         # Audits the locked export: pip-audit cannot resolve the local
