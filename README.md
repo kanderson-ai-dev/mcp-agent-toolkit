@@ -1,111 +1,197 @@
-# mcp-agent-toolkit
+<div align="center">
 
-> A production-shaped **Model Context Protocol system** in Python: a real MCP
-> server exposing four guarded tools, an agent client that discovers and calls
-> them over stdio, a versioned Prompt Registry with a measured A/B gate, and a
-> web console that streams every step live. Quality is measured, not claimed —
-> dataset, deterministic checks, and a separately-prompted LLM-as-judge scorecard.
+# 🔌 MCP Agent Toolkit
 
-[![Python](https://img.shields.io/badge/python-≥3.11-blue)](pyproject.toml)
-[![MCP](https://img.shields.io/badge/MCP%20SDK-≥2.3-purple)](pyproject.toml)
-[![CI](https://img.shields.io/badge/CI-ruff%20·%20mypy%20--strict%20·%20pytest%20·%20e2e-green)](#-verification)
-[![Coverage](https://img.shields.io/badge/branch%20coverage-92%25%20enforced-brightgreen)](#-verification)
-[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+**A production-shaped Model Context Protocol system in Python — a real MCP server exposing four guarded tools, an agent that discovers and calls them at runtime, a versioned Prompt Registry whose promotions are gated by live A/B evaluation, and a console that streams every step. Quality is measured, not claimed: a dataset, deterministic checks, and an independent LLM-as-judge scorecard.**
 
-![Web console demo](docs/web-demo.gif)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![MCP SDK](https://img.shields.io/badge/MCP%20SDK-%E2%89%A52.3-7B3FE4)](https://modelcontextprotocol.io/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-SSE%20API-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19%20%2B%20TypeScript-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![CI](https://github.com/kanderson-ai-dev/mcp-agent-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/kanderson-ai-dev/mcp-agent-toolkit/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)](https://github.com/kanderson-ai-dev/mcp-agent-toolkit/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/badge/linting-ruff-red)](https://github.com/astral-sh/ruff)
+[![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy--strict-blue)](https://mypy-lang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+![Demo: question → live tool cards → final answer → Prompt Registry → gated promotion](docs/web-demo.gif)
+
+</div>
+
+---
 
 ## 📌 What this is
 
-`mcp-agent-toolkit` demonstrates the Model Context Protocol doing real work
-inside an agentic system — not a thin wrapper around an LLM:
+A **production-shaped MCP reference system** built with the official Python
+SDK, FastAPI and React. An **MCP server** exposes exactly four tools —
+`web_search`, `db_query`, `read_file`, `write_file` — each behind enforceable
+guardrails. An **agent client** spawns that server over stdio, **discovers the
+tools at runtime** with `tools/list`, converts them to OpenAI function
+definitions and runs a plain, bounded tool-calling loop. There is no
+LangChain and no LangGraph on purpose: the point of MCP is that the tools
+work with *any* client.
 
-- An **MCP server** (official Python SDK) exposes exactly four tools —
-  `web_search`, `db_query`, `read_file`, `write_file` — each behind
-  enforceable guardrails: a lexical + canonical path sandbox, read-only SQL
-  (statement guard *and* `mode=ro` connection), sliding-window rate limits,
-  and output sanitization.
-- An **agent client** spawns that server over canonical **stdio** transport,
-  discovers the tools at runtime via `tools/list`, and runs a plain
-  OpenAI tool-calling loop. No LangChain/LangGraph — the point of MCP is that
-  it is framework-independent.
-- A **FastAPI web adapter** streams runs over SSE; a **React console**
-  renders every tool call, result and token live.
-- A **Prompt Registry** versions the system prompt and judge rubric as YAML
-  artifacts; promotion is gated by a real A/B evaluation and every mutation
-  lands in a hash-chained audit log.
-- An **evaluation harness** turns quality into a gate: a 24-question dataset
-  (13 adversarial), deterministic checks, and a judge with its own rubric
-  prompt produce a scorecard a prompt must beat to promote.
+On top of that sits the part most agent demos skip. The system prompt and the
+judge rubric are **versioned YAML artifacts** in a Prompt Registry; a new
+version only becomes active after a **live A/B evaluation** passes a gate (or
+a human overrides it with a reason that is written to a **hash-chained audit
+log**). Every answer is graded by a **24-question evaluation harness** —
+deterministic checks plus a judge running on a *different* model than the
+agent — and the result is a committed scorecard, not a claim.
+
+This is engineered as a portfolio-grade, production-*shaped* system: strict
+typing, 517 offline tests, Playwright e2e, a non-root Docker image and a CI
+pipeline with secret scanning. It is **not** claimed to be production-proven
+(see [Known limitations](#known-limitations--next-steps)).
+
+---
 
 ## 💡 Why this matters — for your project, or for a technical reviewer
 
-Everything below is verifiable in this repository — no aspirational claims:
+- 🔌 **A real MCP server, not a wrapper.** Official SDK, stdio as the canonical
+  transport, Streamable HTTP opt-in (loopback + bearer token), honest tool
+  annotations, `outputSchema`, resources and a prompt template. Any MCP
+  client — Claude Desktop included — can drive it.
+- 🔎 **Runtime tool discovery.** The client never hardcodes a schema:
+  `tools/list` becomes the model's function list on every run. Remove a tool
+  from the server and the agent adapts on its next run.
+- 🛡️ **Guardrails that fail loudly.** Every call passes a rate limit, a path
+  sandbox or SQL guard, and an output sanitizer. Rejections are *typed*
+  (`forbidden`, `rate_limited`, `too_large`…), counted in metrics and fed back
+  to the model — never a silent empty result.
+- 🧱 **Defense in depth on the data path.** `db_query` is read-only **twice**:
+  a single-`SELECT` statement guard *and* a `mode=ro` + `PRAGMA query_only`
+  connection. File tools resolve through a lexical **and** canonical sandbox
+  that also stops symlink and junction escapes.
+- 🔁 **Bounded autonomy.** The loop ends with `answer`, `iteration_limit` or
+  `budget_limit`. `RUN_BUDGET_USD` is a hard pre-call gate; unknown model
+  prices stay `null` instead of a fabricated `$0`.
+- 🧬 **Prompts as deployable artifacts.** Candidate → live A/B → promote or
+  roll back, with exactly one promoted version per prompt enforced on disk and
+  every mutation hash-chained. Real history: `agent_system` v2 was **blocked**
+  by the gate; v3 and v4 were promoted by live evidence.
+- 📊 **Measured quality.** Live scorecard (dataset v1.2.0, 24 questions, agent
+  `gpt-4o-mini`, judge `gpt-4o`): task success **4.79/5**, grounding
+  **4.83/5**, adversarial resistance **13/13**, citations **100 %** — and it
+  did not pass the first time; the fix went through the same registry.
+- 🔭 **Observable.** Redacting structlog JSON on stderr (stdout stays pure
+  protocol), request-id correlation client → server, Prometheus metrics, and
+  per-run token / cost / latency telemetry.
+- 🧪 **CI green with zero secrets.** 517 backend tests (92.98 % branch
+  coverage), 54 Playwright e2e, 55 Vitest, `mypy --strict`, gitleaks and
+  `pip-audit` — all offline through a deterministic `StubLLM`.
 
-- **Runtime tool discovery** — the client never hardcodes tool schemas;
-  `tools/list` output becomes OpenAI tool definitions. Drop a tool from the
-  server and the agent adapts on the next run.
-- **Guardrails that fail loudly** — every rejection is a typed envelope
-  (`forbidden`, `rate_limited`, `too_large`…), counted in metrics and fed
-  back to the model so it can adapt honestly. Path escapes, multi-statement
-  SQL and prompt-injection attempts all have dedicated failing tests.
-- **Measured quality** — a real scorecard (`evaluation/scorecard.json`,
-  live run, dataset v1.2.0): task success **4.79/5**, grounding **4.83/5**,
-  tool usage **4.88/5**, adversarial resistance **13/13**, appropriate
-  tool use **100 %** — gate passing, graded by a `gpt-4o` judge.
-- **Prompt lifecycle as an engineered surface** — real promotions happened:
-  `agent_system` v3 beat v1 on a **live** A/B run, and when the expanded
-  24-question dataset later failed the grounding gate, the fix went through
-  the same machinery — `judge_rubric` v2 + `agent_system` v4, the latter
-  promoted only after winning its own live A/B against v3. The audit chain
-  records every step.
-- **Production posture** — `mypy --strict` clean, `ruff` enforced, branch
-  coverage gated at 92 %, `pip-audit` + `gitleaks` clean over full history,
-  Docker image runs as UID 10001, zero secrets in the tree.
-- **Offline-first honesty** — the entire suite runs with zero credentials
-  (`StubLLM` + canned search). Live paths are opt-in; no score, trace or
-  screenshot is ever fabricated.
+---
 
 ## 🏗️ Architecture
 
+### System overview
+
 ```mermaid
-flowchart LR
-    subgraph client["client process"]
-        CLI["mcp-toolkit-agent CLI"] --> LOOP["agent loop<br/>(bounded iterations + budget gate)"]
-        LOOP --> LLM["LLM adapter<br/>OpenAI · StubLLM"]
-        LOOP --> MCPC["McpAgentClient"]
-        LOOP -.-> EV["AgentEvent stream<br/>(camelCase JSON)"]
-        PROMPT["Prompt Registry<br/>(promoted YAML)"] --> LOOP
+graph TD
+    USER(["User"]) --> UI["React console<br/>Vite · TypeScript · Tailwind"]
+    USER --> CLI["mcp-toolkit-agent<br/>CLI"]
+    UI -- "POST /api/chat<br/>GET /api/chat/stream (SSE)" --> API["FastAPI web adapter<br/>one MCP child per process"]
+
+    API --> LOOP
+    CLI --> LOOP
+
+    subgraph CLIENT["Agent client"]
+        LOOP["Bounded agent loop<br/>answer · iteration_limit · budget_limit"]
+        LOOP <--> LLM["LLM adapter<br/>OpenAI · StubLLM"]
+        LOOP --> MCPC["MCP client<br/>tools/list discovery"]
     end
+
+    REG[("Prompt Registry<br/>vN.yaml + audit chain")] -- "promoted prompt<br/>resolved per run" --> LOOP
 
     MCPC -- "stdio · JSON-RPC" --> SRV
 
-    subgraph server["server process"]
-        SRV["MCPServer"] --> INV["guarded_invoke"]
-        INV --> RL["ToolLimiter<br/>(memory · Redis opt-in)"]
-        RL --> TOOLS["4 tool handlers"]
-        TOOLS --> ENV["result envelope + sanitizer"]
+    subgraph SERVER["MCP server (child process)"]
+        SRV["MCPServer"] --> GI["guarded_invoke"]
+        GI --> RL["rate limit<br/>per tool + session"]
+        RL --> H["tool handler"]
+        H --> SAN["sanitizer +<br/>typed result envelope"]
     end
 
-    TOOLS --> WS["web_search"] --> NET(["Tavily · DuckDuckGo · stub"])
-    TOOLS --> DBQ["db_query"] --> DB[("demo.db<br/>read-only")]
-    TOOLS --> FS["read_file · write_file"] --> SB["path sandbox"] --> FSYS[("sandbox fs")]
+    H --> WS["web_search"] --> NET(["Tavily · DuckDuckGo · stub"])
+    H --> DBQ["db_query"] --> DB[("demo.db<br/>read-only")]
+    H --> FS["read_file · write_file"] --> SB["path sandbox"] --> FSYS[("sandbox folder")]
+```
 
-    subgraph web["web console"]
-        API["FastAPI<br/>/api/chat + SSE"] --> UI["React + Vite + Tailwind"]
-        EV -.-> API
+### Life of one question
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant W as FastAPI adapter
+    participant A as Agent loop
+    participant L as LLM
+    participant C as MCP client
+    participant S as MCP server
+    B->>W: POST /api/chat {question}
+    W-->>B: 201 {runId}
+    B->>W: GET /api/chat/stream?runId=…
+    W->>A: run_agent(question, promoted prompt)
+    loop until answer · iteration_limit · budget_limit
+        A->>L: messages + discovered tools
+        L-->>A: tool call(s) or final text
+        A-->>B: SSE tool_call
+        A->>C: call(tool, args, requestId)
+        C->>S: tools/call (stdio, _meta.requestId)
+        S->>S: rate limit → guard → handler → sanitize
+        S-->>C: typed envelope (ok | error code)
+        C-->>A: outcome (never raises)
+        A-->>B: SSE tool_result
     end
+    A-->>B: SSE final {answer, terminatedBy, telemetry, prompt version}
+```
+
+### The guardrail chain (every tool call)
+
+```mermaid
+graph TD
+    CALL["tools/call"] --> RID["extract request id"]
+    RID --> RATE{"rate limit<br/>tool + session"}
+    RATE -- "over limit" --> E1["rate_limited"]
+    RATE -- "ok" --> TOOL{"which tool?"}
+    TOOL -- "read_file · write_file" --> PS["path sandbox<br/>lexical + canonical"]
+    TOOL -- "db_query" --> SG["SQL guard → read-only connection"]
+    TOOL -- "web_search" --> PRV["search provider"]
+    PS -- "escape" --> E2["forbidden"]
+    SG -- "not a single SELECT" --> E3["invalid_input / forbidden"]
+    PS --> OUT["raw output"]
+    SG --> OUT
+    PRV --> OUT
+    OUT --> SAN2["strip control · bidi · zero-width<br/>cap at MAX_TOOL_OUTPUT_CHARS"]
+    SAN2 --> OK["status ok + structured content"]
+    E1 --> ENV["isError = true<br/>typed envelope"]
+    E2 --> ENV
+    E3 --> ENV
 ```
 
 | Surface | Module | What it does |
 |---|---|---|
 | MCP server | `src/mcp_toolkit/server/` | `MCPServer`, stdio canonical, Streamable HTTP opt-in, annotations + `outputSchema` + resources + prompts |
-| Guardrails | `server/guardrails/` | path sandbox, SQL guard, sanitizer, `ToolLimiter` (in-memory; Redis behind `RATE_LIMIT_BACKEND=redis`) |
-| Agent loop | `client/agent_loop.py` | LLM ⇄ tools, `MAX_TOOL_ITERATIONS` + `RUN_BUDGET_USD` bounds, delta streaming via `on_delta` |
+| Guardrails | `server/guardrails/` | path sandbox, SQL guard, sanitizer, rate limiter (in-memory; Redis behind `RATE_LIMIT_BACKEND=redis`) |
+| Agent loop | `client/agent_loop.py` | LLM ⇄ tools, `MAX_TOOL_ITERATIONS` + `RUN_BUDGET_USD` bounds, delta streaming |
 | MCP client | `client/mcp_client.py` | spawns the server, env allow-list, `tools/list` → OpenAI defs, request-id correlation |
 | Web adapter | `web/` | `POST /api/chat` → `201 {runId}` → `GET /api/chat/stream` (SSE), `/api/tools`, `/api/status`, registry API |
-| Prompt Registry | `prompts/` + `src/mcp_toolkit/prompts/` | versioned YAML, candidate → A/B → promote/rollback, hash-chained audit |
+| Prompt Registry | `src/mcp_toolkit/prompts/` + `prompts/` | versioned YAML, candidate → A/B → promote / rollback, hash-chained audit |
 | Evaluation | `evaluation/` | dataset, deterministic checks, judge, scorecard artifact |
-| Console | `frontend/` | React 19 + Vite + TS strict + Tailwind — thin client, zero business logic |
+| Console | `frontend/` | React 19 + Vite + TypeScript strict + Tailwind — a thin client with zero business logic |
+
+### Three ways to run it
+
+| Entry point | Command | Surface |
+|---|---|---|
+| **Web console** | `uv run mcp-toolkit-web` | React console on `localhost:3000` — live tool-step cards, final answer with sources, Prompt Registry tab |
+| **CLI agent** | `uv run mcp-toolkit-agent "…"` | Pretty or `--json` event stream in the terminal |
+| **MCP server only** | `uv run mcp-toolkit-server` | stdio JSON-RPC for Claude Desktop or any MCP client |
+
+![Console — a three-tool run: database query, web search and file write, then the final answer with prompt version and telemetry](docs/ui-qa/q01-desktop.png)
+
+---
 
 ## 📊 Evaluation-Driven Development (EDD)
 
@@ -175,7 +261,10 @@ not persist indefinitely on the platform:
 
 ## 🔐 Prompt Registry
 
-Prompts are versioned data, not code-embedded strings:
+Prompts are **versioned data, not code-embedded strings**. Each prompt lives in
+`prompts/<name>/vN.yaml` (names: `agent_system`, `judge_rubric`); a strict
+schema validates it, a state machine governs its lifecycle, and a hash-chained
+log records every change.
 
 ```mermaid
 stateDiagram-v2
@@ -186,6 +275,30 @@ stateDiagram-v2
     rolled_back --> promoted: promote again (new A/B gate)
 ```
 
+```mermaid
+graph LR
+    NEW["create candidate<br/>CLI · API · console"] --> FILE["prompts/name/vN+1.yaml<br/>atomic write"]
+    FILE --> AB{"live A/B run<br/>24 questions,<br/>baseline vs candidate"}
+    AB -- "no regression > 0.1<br/>adversarial 100 %" --> PROMO["promote<br/>old version rolled_back"]
+    AB -- "gate failed" --> KEEP["stays candidate<br/>promotion blocked"]
+    KEEP -. "human override<br/>reason required" .-> PROMO
+    PROMO --> LOG[("audit.jsonl<br/>hash chain")]
+    AB --> LOG
+    FILE --> LOG
+    PROMO --> RUN["next run resolves<br/>the promoted version"]
+```
+
+**How a `vN.yaml` is created.** There are three entry points and **one writer**:
+`uv run python -m scripts.prompts_cli candidate <name> --file <template>`,
+`POST /api/prompts/{name}/candidates` (or the console's candidate editor), or a
+hand-copied file followed by a reload. They all end in `create_candidate`,
+which checks the name against the known prompts, takes `max(version) + 1`,
+validates the artifact (`extra="forbid"`, size caps, no key-looking strings),
+writes it atomically (temp file → `os.replace`) and appends a
+`candidate_created` event to the audit chain. Each artifact carries a SHA-256
+of its template; `{name, version, sha256}` is stamped on every run, metric and
+scorecard entry.
+
 | CLI (`uv run python -m scripts.prompts_cli`) | API (`/api/prompts`, mutations need `ENABLE_PROMPT_ADMIN=1`) |
 |---|---|
 | `list`, `show`, `diff` | `GET /api/prompts`, `/{name}`, `/{name}/diff` |
@@ -195,15 +308,22 @@ stateDiagram-v2
 | `rollback` | `POST /{name}/rollback` |
 | `audit` | `GET /api/prompts/audit` |
 
-The story this repo actually contains: `agent_system` v3 was promoted over v1
-after a **live** A/B run (judged, gate passed, 13/13 adversarial cases
-resisted on both sides); v1's `rolled_back` status is the trail of the
-rollback path being exercised for real. When the expanded v1.2.0 dataset
-then failed the grounding gate on v3, the remediation ran through the
+The story this repo actually contains: `agent_system` v2 **failed** its live
+A/B gate (grounding 3.71 → 3.33, adversarial 11/13) and was never promoted;
+v3 was promoted over v1 after a **live** A/B run (judged, gate passed, 13/13
+adversarial cases resisted on both sides); v1's `rolled_back` status is the
+trail of the rollback path being exercised for real. When the expanded v1.2.0
+dataset then failed the grounding gate on v3, the remediation ran through the
 same lifecycle: `judge_rubric@v2` (promoted with an audited override) and
-`agent_system@v4` (promoted only after beating v3 in its own live A/B).
-Every mutation is a hash-chained `data/prompt-registry/audit.jsonl` entry —
-`prompts_cli audit` / `verify_chain()` detects tampering.
+`agent_system@v4` (promoted only after beating v3 in its own live A/B). Every
+mutation is a hash-chained `data/prompt-registry/audit.jsonl` entry —
+`prompts_cli audit` / `verify_chain()` detects a tampered line.
+
+| Blocked promotion (A/B gate failed — override reason required) | Version diff |
+|---|---|
+| ![Promote dialog: A/B gate failed, promotion blocked, override reason required](docs/ui-qa/registry/ab-blocked.png) | ![Diff between two prompt versions](docs/ui-qa/registry/diff.png) |
+
+![Audit timeline — hash-chained registry events](docs/ui-qa/registry/audit.png)
 
 ## 🔌 API
 
@@ -352,6 +472,10 @@ React 19 + Vite + TypeScript strict + Tailwind — a deliberately thin client:
 | Export | per-run Markdown / JSON download — same hidden-field rules as the UI |
 | States | designed empty / streaming / result / error + "Try again" recovery |
 | A11y & QA | `aria-live` announcements, `prefers-reduced-motion`, ≥ 44 px mobile tap targets, CLS ≤ 0.01, no raw identifiers (automated sweep) |
+
+| Empty state | Streaming | Guardrail block |
+|---|---|---|
+| ![Empty state with example questions](docs/ui-qa/state-empty.png) | ![Live tool-step cards while the agent works](docs/ui-qa/state-streaming.png) | ![A blocked call explained in plain language](docs/ui-qa/06-guardrail-block-1280.png) |
 
 ## 📁 Project Structure
 
