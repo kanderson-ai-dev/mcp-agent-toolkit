@@ -13,6 +13,7 @@
 [![Ruff](https://img.shields.io/badge/linting-ruff-red)](https://github.com/astral-sh/ruff)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy--strict-blue)](https://mypy-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![M8ven Score](https://m8ven.ai/badge/mcp/kanderson-ai-dev-mcp-agent-toolkit-17t2he?v=7edb2e8e95d2e56ecd169af23df0344e)](https://m8ven.ai/mcp/kanderson-ai-dev-mcp-agent-toolkit-17t2he?s=readme)
 
 ![Demo: question → live tool cards → final answer → Prompt Registry → gated promotion](docs/web-demo.gif)
 
